@@ -13,7 +13,7 @@ const Enemy = ({ spawnPosition, playerRef }) => {
     const rigidBodyRef = useRef();
     const { noiseLevel } = useNoise();
     const { loseGame, gameState } = useGame();
-    const { playSound } = useAudio();
+    const { playSound, stopSound } = useAudio();
     const [state, setState] = useState('patrol'); // 'patrol', 'stalk', 'hunt'
     const [targetPosition, setTargetPosition] = useState(new Vector3(...spawnPosition));
     const [lastNoisePosition, setLastNoisePosition] = useState(new Vector3(...spawnPosition));
@@ -127,38 +127,47 @@ const Enemy = ({ spawnPosition, playerRef }) => {
         );
 
         if (distToPlayer < 1.5) {
+            // Stop breathing sound
+            if (rigidBodyRef.current.breathingSource) {
+                try {
+                    rigidBodyRef.current.breathingSource.stop();
+                } catch (e) { }
+            }
+            // Also use context stopSound to be sure
+            stopSound('monsterBreathing');
+            stopSound('hunt');
+
+            // Play game over sound
+            playSound('gameOver', {
+                position: [playerPos.x, playerPos.y, playerPos.z],
+                listenerPosition: [playerPos.x, playerPos.y, playerPos.z],
+                intensity: 1.0
+            });
+
             loseGame();
         }
 
-        // Play footstep sounds based on movement and state
+        // Play breathing sound periodically in ALL modes (Patrol, Stalk, Hunt)
+        // Use a longer interval for breathing (e.g. 4 seconds)
         const currentTime = Date.now() / 1000; // Convert to seconds
-        let footstepInterval;
-        let footstepIntensity;
+        if (currentTime - (rigidBodyRef.current.lastBreathingTime || 0) > 4.0) {
+            // Intensity varies by state
+            let breathIntensity = 0.5; // Default/Patrol
+            if (state === 'stalk') breathIntensity = 0.7;
+            if (state === 'hunt') breathIntensity = 1.0;
 
-        switch (state) {
-            case 'hunt':
-                footstepInterval = 0.3; // Fast footsteps
-                footstepIntensity = 1.0; // Loud
-                break;
-            case 'stalk':
-                footstepInterval = 0.5; // Medium footsteps
-                footstepIntensity = 0.6; // Medium volume
-                break;
-            case 'patrol':
-            default:
-                footstepInterval = 0.7; // Slow footsteps
-                footstepIntensity = 0.3; // Quiet
-                break;
-        }
-
-        // Play footstep if enough time has passed and enemy is moving
-        if (distance > 0.5 && currentTime - lastFootstepTime.current > footstepInterval) {
-            playSound('footstep', {
+            const source = playSound('monsterBreathing', {
                 position: [enemyPos.x, enemyPos.y, enemyPos.z],
                 listenerPosition: [playerPos.x, playerPos.y, playerPos.z],
-                intensity: footstepIntensity
+                intensity: breathIntensity
             });
-            lastFootstepTime.current = currentTime;
+
+            // Store source to stop it later
+            if (source) {
+                rigidBodyRef.current.breathingSource = source;
+            }
+
+            rigidBodyRef.current.lastBreathingTime = currentTime;
         }
     });
 

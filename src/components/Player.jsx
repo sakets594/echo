@@ -17,6 +17,8 @@ const CROUCH_NOISE = 0;
 const WALK_NOISE = 5;
 const SPRINT_NOISE = 15;
 const CLAP_NOISE = 30; // Instant noise from clapping
+const PLAYER_HEIGHT = 1.5;
+const JUMP_FORCE = 5;
 
 const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
     const { camera } = useThree();
@@ -127,7 +129,7 @@ const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
         };
     }, []);
 
-    useFrame((state) => {
+    useFrame(() => {
         if (!rigidBodyRef.current) return;
 
         // Stop movement if game is not playing
@@ -136,77 +138,82 @@ const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
             return;
         }
 
-        // Determine current speed based on state
+        // Movement logic
+        const forward = moveForward.current;
+        const backward = moveBackward.current;
+        const left = moveLeft.current;
+        const right = moveRight.current;
+        const sprint = isSprinting;
+        const crouch = isCrouching;
+        const jump = false; // Space is used for Clap, so no jump for now
+
+        // Determine current speed and noise
         let currentSpeed = WALK_SPEED;
         let noiseRate = WALK_NOISE;
 
-        if (isCrouching) {
+        if (crouch) {
             currentSpeed = CROUCH_SPEED;
             noiseRate = CROUCH_NOISE;
-        } else if (isSprinting) {
+        } else if (sprint) {
             currentSpeed = SPRINT_SPEED;
             noiseRate = SPRINT_NOISE;
         }
 
-        // Get camera forward vector projected on XZ plane
-        const camForward = new Vector3();
-        camera.getWorldDirection(camForward);
-        camForward.y = 0;
-        camForward.normalize();
+        // Calculate movement direction relative to camera
+        const direction = new Vector3();
+        const frontVector = new Vector3(0, 0, Number(backward) - Number(forward));
+        const sideVector = new Vector3(Number(left) - Number(right), 0, 0);
 
-        const camRight = new Vector3();
-        camRight.crossVectors(camForward, new Vector3(0, 1, 0));
+        direction.subVectors(frontVector, sideVector).normalize().multiplyScalar(currentSpeed).applyEuler(camera.rotation);
 
-        // Combine movement vectors
-        const moveVec = new Vector3();
-        moveVec.addScaledVector(camForward, Number(moveForward.current) - Number(moveBackward.current));
-        moveVec.addScaledVector(camRight, Number(moveRight.current) - Number(moveLeft.current));
+        rigidBodyRef.current.setLinvel({ x: direction.x, y: rigidBodyRef.current.linvel().y, z: direction.z });
 
-        const isMoving = moveVec.length() > 0;
-        if (isMoving) {
-            moveVec.normalize().multiplyScalar(currentSpeed);
+        // Jump
+        if (jump && Math.abs(rigidBodyRef.current.linvel().y) < 0.1) {
+            rigidBodyRef.current.setLinvel({ x: rigidBodyRef.current.linvel().x, y: JUMP_FORCE, z: rigidBodyRef.current.linvel().z });
         }
 
         // Update noise system
+        const isMoving = forward || backward || left || right;
         setMovementNoise(noiseRate, isMoving);
 
-        // Apply velocity
-        const currentVel = rigidBodyRef.current.linvel();
-        rigidBodyRef.current.setLinvel({ x: moveVec.x, y: currentVel.y, z: moveVec.z });
-
-        // Sync camera to rigid body
+        // Update camera position to follow player
         const pos = rigidBodyRef.current.translation();
-        const cameraHeight = isCrouching ? 0.75 : 1.5;
+        const cameraHeight = crouch ? 0.75 : PLAYER_HEIGHT;
         camera.position.set(pos.x, pos.y + cameraHeight, pos.z);
 
-        // Play player footstep sounds based on movement
-        if (isMoving && !isCrouching) {
-            const currentTime = Date.now() / 1000;
-            let footstepInterval;
-            let footstepIntensity;
+        // Footstep sounds
+        const currentTime = Date.now() / 1000;
 
-            if (isSprinting) {
-                footstepInterval = 0.3; // Fast footsteps when sprinting
-                footstepIntensity = 0.6;
-            } else {
-                footstepInterval = 0.5; // Normal walking pace
-                footstepIntensity = 0.4;
-            }
+        // Adjust intervals for the new audio file
+        let footstepInterval = 0.6; // Default walk
+        let footstepIntensity = 0.5; // Default walk
 
-            if (currentTime - lastFootstepTime.current > footstepInterval) {
-                playSound('playerFootstep', {
-                    position: [pos.x, pos.y, pos.z],
-                    listenerPosition: [pos.x, pos.y, pos.z],
-                    intensity: footstepIntensity
-                });
-                lastFootstepTime.current = currentTime;
-            }
+        if (sprint) {
+            footstepInterval = 0.35;
+            footstepIntensity = 0.8;
+        } else if (crouch) {
+            footstepInterval = 0.8; // Slower for crouch
+            footstepIntensity = 0.2; // Very quiet
+        }
+
+        if (isMoving && currentTime - lastFootstepTime.current > footstepInterval) {
+            playSound('playerWalk', {
+                position: [pos.x, pos.y, pos.z],
+                listenerPosition: [pos.x, pos.y, pos.z],
+                intensity: footstepIntensity
+            });
+            lastFootstepTime.current = currentTime;
+
+            // Generate noise based on movement
+            const noiseAmount = sprint ? 20 : (crouch ? 2 : 5);
+            addNoise(noiseAmount);
         }
 
         // Update debug UI
-        const debugEl = document.getElementById('debug-pos');
+        const debugEl = document.getElementById('debug-ui');
         if (debugEl) {
-            const state = isCrouching ? '(Crouch)' : isSprinting ? '(Sprint)' : '';
+            const state = crouch ? '(Crouch)' : sprint ? '(Sprint)' : '';
             debugEl.innerText = `Pos: ${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)} ${state}`;
         }
     });

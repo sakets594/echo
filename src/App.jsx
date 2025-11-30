@@ -49,6 +49,25 @@ function App() {
                   <Stats />
                 </Suspense>
               </Canvas>
+              <div id="debug-ui" style={{
+                position: 'absolute',
+                top: '10px',
+                left: '10px',
+                color: 'white',
+                fontFamily: 'monospace',
+                pointerEvents: 'none'
+              }}></div>
+              <div style={{
+                position: 'absolute',
+                bottom: '10px',
+                right: '10px',
+                color: 'rgba(255, 255, 255, 0.5)',
+                fontFamily: 'monospace',
+                fontSize: '12px',
+                pointerEvents: 'none'
+              }}>
+                Audio assets from Pixabay.com
+              </div>
               <HUD />
             </div>
           </AudioProvider>

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useRef, useCallback } from 'react';
+import React, { createContext, useContext, useRef, useCallback, useEffect } from 'react';
 
 const AudioContext = createContext();
 
@@ -22,8 +22,42 @@ export const AudioProvider = ({ children }) => {
         return audioContextRef.current;
     }, []);
 
-    // Generate procedural sound buffers
+    // Load external sounds
+    useEffect(() => {
+        const loadSounds = async () => {
+            try {
+                const ctx = getAudioContext();
+                const sounds = {
+                    'monsterBreathing': '/sounds/monster_breathing.mp3',
+                    'playerWalk': '/sounds/player_walk.mp3',
+                    'gameOver': '/sounds/game_over.mp3'
+                };
+
+                for (const [key, url] of Object.entries(sounds)) {
+                    const response = await fetch(url);
+                    const arrayBuffer = await response.arrayBuffer();
+                    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+                    soundBuffersRef.current[key] = audioBuffer;
+                }
+
+                // Map aliases
+                soundBuffersRef.current['hunt'] = soundBuffersRef.current['monsterBreathing'];
+
+                console.log("All audio assets loaded");
+            } catch (error) {
+                console.error("Failed to load audio assets:", error);
+            }
+        };
+        loadSounds();
+    }, [getAudioContext]);
+
+    // Generate procedural sound buffers (only for remaining procedural sounds)
     const generateSoundBuffer = useCallback((type) => {
+        // If we have a loaded buffer for this type, return it
+        if (soundBuffersRef.current[type]) {
+            return soundBuffersRef.current[type];
+        }
+
         const ctx = getAudioContext();
         const sampleRate = ctx.sampleRate;
         let buffer;
@@ -65,23 +99,6 @@ export const AudioProvider = ({ children }) => {
                 break;
             }
 
-            case 'playerFootstep': {
-                // Player footstep - lighter crunch/scuff sound
-                const duration = 0.15; // 150ms
-                buffer = ctx.createBuffer(1, sampleRate * duration, sampleRate);
-                const data = buffer.getChannelData(0);
-                for (let i = 0; i < data.length; i++) {
-                    const t = i / sampleRate;
-                    const decay = Math.exp(-t * 10);
-                    // Lighter footstep: less bass, more texture
-                    const step = Math.sin(2 * Math.PI * 100 * t) * 0.3;
-                    const texture = (Math.random() * 2 - 1) * 0.4;
-                    const scuff = Math.sin(2 * Math.PI * 250 * t) * 0.15;
-                    data[i] = (step + texture + scuff) * decay * 0.35;
-                }
-                break;
-            }
-
             case 'debris': {
                 // Collision/debris sound (short noise burst with low frequency component)
                 const duration = 0.2; // 200ms
@@ -94,29 +111,6 @@ export const AudioProvider = ({ children }) => {
                     const noise = (Math.random() * 2 - 1) * 0.5;
                     const impact = Math.sin(2 * Math.PI * 60 * t) * 0.3;
                     data[i] = (noise + impact) * decay * 0.25;
-                }
-                break;
-            }
-
-            case 'hunt': {
-                // Monster breathing - rhythmic inhale/exhale pattern
-                const duration = 2.0; // 2 seconds for full breath cycle
-                buffer = ctx.createBuffer(1, sampleRate * duration, sampleRate);
-                const data = buffer.getChannelData(0);
-                for (let i = 0; i < data.length; i++) {
-                    const t = i / sampleRate;
-                    // Breathing rhythm: slow sine wave for inhale/exhale
-                    const breathCycle = Math.sin(2 * Math.PI * 0.5 * t); // 0.5 Hz = 2 second cycle
-                    const breathIntensity = Math.abs(breathCycle);
-
-                    // Low frequency rumble for breath sound
-                    const rumble = Math.sin(2 * Math.PI * 40 * t) * 0.3;
-                    // Add some texture/noise for realism
-                    const texture = (Math.random() * 2 - 1) * 0.15 * breathIntensity;
-                    // Slight whistle/wheeze on higher frequency
-                    const wheeze = Math.sin(2 * Math.PI * 150 * t) * 0.1 * breathIntensity;
-
-                    data[i] = (rumble + texture + wheeze) * breathIntensity * 0.25;
                 }
                 break;
             }
@@ -139,12 +133,28 @@ export const AudioProvider = ({ children }) => {
         return 1.0; // Clear
     }, []);
 
+    // Track active sound sources for stopping them later
+    const activeSourcesRef = useRef({});
+
+    // Stop a specific sound type
+    const stopSound = useCallback((type) => {
+        if (activeSourcesRef.current[type]) {
+            try {
+                activeSourcesRef.current[type].stop();
+                activeSourcesRef.current[type] = null;
+            } catch (e) {
+                // Ignore errors if already stopped
+            }
+        }
+    }, []);
+
     // Play spatial sound
     const playSound = useCallback((type, options = {}) => {
         const {
             position = [0, 0, 0],
             intensity = 1.0,
             listenerPosition = [0, 0, 0],
+            loop = false, // Add loop option
         } = options;
 
         const ctx = getAudioContext();
@@ -164,6 +174,12 @@ export const AudioProvider = ({ children }) => {
         // Create audio nodes
         const source = ctx.createBufferSource();
         source.buffer = buffer;
+        source.loop = loop; // Set loop property
+
+        // Store source for stopping later if needed
+        if (type === 'monsterBreathing' || type === 'hunt') {
+            activeSourcesRef.current[type] = source;
+        }
 
         const gainNode = ctx.createGain();
         const panner = ctx.createPanner();
@@ -175,7 +191,7 @@ export const AudioProvider = ({ children }) => {
 
         // Different max distances for different sound types
         // Monster sounds (footstep, hunt) have shorter range for more localized fear
-        const maxDistance = (type === 'footstep' || type === 'hunt') ? 15 : 30;
+        const maxDistance = (type === 'footstep' || type === 'hunt' || type === 'monsterBreathing') ? 15 : 30;
         panner.maxDistance = maxDistance;
         panner.rolloffFactor = 1;
 
@@ -209,11 +225,17 @@ export const AudioProvider = ({ children }) => {
             source.disconnect();
             panner.disconnect();
             gainNode.disconnect();
+            if (activeSourcesRef.current[type] === source) {
+                activeSourcesRef.current[type] = null;
+            }
         };
+
+        return source;
     }, [getAudioContext, generateSoundBuffer, calculateOcclusion]);
 
     const value = {
         playSound,
+        stopSound,
     };
 
     return (
