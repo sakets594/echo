@@ -192,7 +192,10 @@ const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
             >
                 <CapsuleCollider args={[0.75, 0.5]} />
             </RigidBody>
-            <PointerLockControls />
+            <PointerLockControls
+                maxPolarAngle={Math.PI / 2}  // Lock camera at horizon (no looking up)
+                minPolarAngle={Math.PI / 2}  // Lock camera at horizon (no looking down)
+            />
         </>
     );
 };
