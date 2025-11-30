@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { RigidBody } from '@react-three/rapier';
+import { RigidBody, CuboidCollider } from '@react-three/rapier';
 import { Vector3 } from 'three';
 import { useNoise } from '../contexts/NoiseContext';
 import { useGame } from '../contexts/GameContext';
@@ -196,6 +196,7 @@ const Enemy = ({ spawnPosition, playerRef, enemyRef }) => {
             type="dynamic"
             lockRotations
         >
+            <CuboidCollider args={[ENEMY_SIZE / 2, ENEMY_HEIGHT / 2, ENEMY_SIZE / 2]} position={[0, ENEMY_HEIGHT / 2, 0]} />
             <mesh position={[0, ENEMY_HEIGHT / 2, 0]}>
                 <boxGeometry args={[ENEMY_SIZE, ENEMY_HEIGHT, ENEMY_SIZE]} />
                 <meshStandardMaterial color={getColor()} emissive={getColor()} emissiveIntensity={0.5} />

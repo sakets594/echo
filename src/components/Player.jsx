@@ -30,10 +30,15 @@ const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
 
     // Expose rigidBodyRef to parent
     React.useEffect(() => {
+        console.log(`[Player] Initializing with startPosition:`, startPosition);
         if (playerRef) {
             playerRef.current = rigidBodyRef.current;
         }
-    }, [playerRef]);
+        if (rigidBodyRef.current) {
+            const pos = rigidBodyRef.current.translation();
+            console.log(`[Player] RigidBody Initial Pos:`, pos);
+        }
+    }, [playerRef, startPosition]);
 
     // Movement state
     const moveForward = useRef(false);

@@ -44,10 +44,15 @@ function GameScene({ levelData }) {
   // Calculate start position when level changes
   const startPos = useMemo(() => {
     if (!levelData) return [0, 5, 0];
+    console.log(`[App] Loading Level: ${levelData.level_id}`);
     const startNode = levelData.layout.flatMap((row, z) =>
       row.split('').map((char, x) => ({ char, x, z }))
     ).find(n => n.char === 'S');
-    return startNode ? [startNode.x * GAME_CONFIG.CELL_SIZE, 2, startNode.z * GAME_CONFIG.CELL_SIZE] : [0, 5, 0];
+
+    const pos = startNode ? [startNode.x * GAME_CONFIG.CELL_SIZE, 3, startNode.z * GAME_CONFIG.CELL_SIZE] : [0, 5, 0];
+    console.log(`[App] Start Node:`, startNode);
+    console.log(`[App] Calculated Start Position:`, pos);
+    return pos;
   }, [levelData]);
 
   useFrame(() => {

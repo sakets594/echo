@@ -79,23 +79,17 @@ const LevelBuilder = ({ levelData, playerRef, enemyRef, lidarParams }) => {
   const components = useMemo(() => {
     const items = [];
 
-    // Create a single ground plane
-    const levelWidth = layout[0].length * CELL_SIZE;
+    // Ceiling (single large plane is fine for ceiling as it's just visual/blocking)
+    const maxWidth = Math.max(...layout.map(row => row.length));
+    const levelWidth = maxWidth * CELL_SIZE;
     const levelDepth = layout.length * CELL_SIZE;
-    items.push(
-      <RigidBody key="ground" type="fixed" colliders="cuboid" position={[levelWidth / 2 - CELL_SIZE / 2, -0.5, levelDepth / 2 - CELL_SIZE / 2]}>
-        <Box args={[levelWidth, 1, levelDepth]} material={getMaterial("#222222")} receiveShadow />
-      </RigidBody>
-    );
 
-    // Ceiling
     items.push(
       <Box
         key="ceiling"
         args={[levelWidth, 0.2, levelDepth]}
         position={[levelWidth / 2 - CELL_SIZE / 2, WALL_HEIGHT + 0.1, levelDepth / 2 - CELL_SIZE / 2]}
         material={getMaterial("#111111")}
-        receiveShadow
       />
     );
 
@@ -103,6 +97,19 @@ const LevelBuilder = ({ levelData, playerRef, enemyRef, lidarParams }) => {
       row.split('').forEach((char, x) => {
         const type = legend[char];
         const position = [x * CELL_SIZE, 0, z * CELL_SIZE];
+
+        // Always add a floor tile for every defined cell
+        if (type) {
+          // Debug log for specific tiles (e.g., near start) or first few
+          if (x < 5 && z < 5) {
+            // console.log(`[LevelBuilder] Creating floor at ${x},${z} -> World: ${position[0]}, -2.5, ${position[2]}`);
+          }
+          items.push(
+            <RigidBody key={`floor-${x}-${z}`} type="fixed" colliders="cuboid" position={[position[0], -2.5, position[2]]}>
+              <Box args={[CELL_SIZE, 5, CELL_SIZE]} material={getMaterial("#222222")} receiveShadow />
+            </RigidBody>
+          );
+        }
 
         if (type === 'Wall') {
           items.push(
