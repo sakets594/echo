@@ -9,8 +9,14 @@ import { useAudio } from '../contexts/AudioContext';
 const ENEMY_HEIGHT = 2.5;
 const ENEMY_SIZE = 1;
 
-const Enemy = ({ spawnPosition, playerRef }) => {
+const Enemy = ({ spawnPosition, playerRef, enemyRef }) => {
     const rigidBodyRef = useRef();
+
+    // Sync enemyRef
+    useEffect(() => {
+        if (enemyRef) enemyRef.current = rigidBodyRef.current;
+    }, [enemyRef]);
+
     const { noiseLevel } = useNoise();
     const { loseGame, gameState } = useGame();
     const { playSound, stopSound } = useAudio();

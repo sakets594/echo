@@ -9,6 +9,7 @@ import { GameProvider } from './contexts/GameContext';
 import { NoiseProvider } from './contexts/NoiseContext';
 import { ScannerProvider } from './contexts/ScannerContext';
 import { AudioProvider } from './contexts/AudioContext';
+import Minimap from './components/Minimap';
 import level1Data from './levels/level1.json';
 
 // Find start position from level data
@@ -22,14 +23,16 @@ const startPos = startNode
 
 function GameScene() {
   const playerRef = useRef();
+  const enemyRef = useRef();
 
   return (
     <>
       {/* Removed ambient and directional lights for darkness mode */}
       {/* Geometry is now only visible via the scanner shader */}
 
-      <LevelBuilder levelData={level1Data} playerRef={playerRef} />
+      <LevelBuilder levelData={level1Data} playerRef={playerRef} enemyRef={enemyRef} />
       <Player startPosition={startPos} playerRef={playerRef} />
+      <Minimap levelData={level1Data} playerRef={playerRef} enemyRef={enemyRef} />
     </>
   );
 }

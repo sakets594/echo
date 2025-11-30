@@ -58,7 +58,7 @@ const useLidarMaterials = () => {
   return { getMaterial };
 };
 
-const LevelBuilder = ({ levelData, playerRef }) => {
+const LevelBuilder = ({ levelData, playerRef, enemyRef }) => {
   const { layout, legend } = levelData;
   const { collectKey, hasKey, winGame } = useGame();
   const { getMaterial } = useLidarMaterials(); // Use shared materials
@@ -200,7 +200,7 @@ const LevelBuilder = ({ levelData, playerRef }) => {
   return (
     <group>
       {components}
-      {entitySpawnPos && <Enemy spawnPosition={entitySpawnPos} playerRef={playerRef} />}
+      {entitySpawnPos && <Enemy spawnPosition={entitySpawnPos} playerRef={playerRef} enemyRef={enemyRef} />}
     </group>
   );
 };
