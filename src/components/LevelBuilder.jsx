@@ -9,7 +9,7 @@ import { lidarVertexShader, lidarFragmentShader } from '../shaders/LidarShader';
 import * as THREE from 'three';
 
 const CELL_SIZE = 3;
-const WALL_HEIGHT = 3;
+const WALL_HEIGHT = 5; // Increased from 3 to 5 for better clearance
 
 // Shared material manager - creates materials once and updates them uniformly
 const useLidarMaterials = () => {
@@ -86,6 +86,17 @@ const LevelBuilder = ({ levelData, playerRef }) => {
       <RigidBody key="ground" type="fixed" colliders="cuboid" position={[levelWidth / 2 - CELL_SIZE / 2, -0.5, levelDepth / 2 - CELL_SIZE / 2]}>
         <Box args={[levelWidth, 1, levelDepth]} material={getMaterial("#222222")} />
       </RigidBody>
+    );
+
+    // Add ceiling to hide wall tops (visual only, no collision)
+    console.log('[LevelBuilder] Adding ceiling at height:', WALL_HEIGHT + 0.1);
+    items.push(
+      <Box
+        key="ceiling"
+        args={[levelWidth, 0.2, levelDepth]}
+        position={[levelWidth / 2 - CELL_SIZE / 2, WALL_HEIGHT + 0.1, levelDepth / 2 - CELL_SIZE / 2]}
+        material={getMaterial("#111111")}
+      />
     );
 
     layout.forEach((row, z) => {
