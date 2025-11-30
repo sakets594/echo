@@ -1,4 +1,4 @@
-import React, { Suspense, useRef } from 'react';
+import React, { Suspense, useRef, useState, useMemo, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Stats } from '@react-three/drei';
 import { Physics } from '@react-three/rapier';
@@ -10,23 +10,25 @@ import { NoiseProvider } from './contexts/NoiseContext';
 import { ScannerProvider } from './contexts/ScannerContext';
 import { AudioProvider } from './contexts/AudioContext';
 import Minimap from './components/Minimap';
-import level1Data from './levels/level1.json';
+import LevelSelector from './components/LevelSelector';
 
 import { useScanner } from './contexts/ScannerContext';
 import { useControls } from 'leva';
 
 import { LIDAR_DEFAULTS } from './constants/LidarConstants';
 
-// Find start position from level data
-const startNode = level1Data.layout.flatMap((row, z) =>
-  row.split('').map((char, x) => ({ char, x, z }))
-).find(n => n.char === 'S');
+import { GAME_CONFIG } from './constants/GameConstants';
 
-const startPos = startNode
-  ? [startNode.x * 5, 2, startNode.z * 5]
-  : [0, 5, 0];
+// Load all levels dynamically
+const levelModules = import.meta.glob('./levels/*.json', { eager: true });
+const allLevels = Object.values(levelModules).map(m => m.default || m).sort((a, b) => {
+  // Sort by level ID number if possible
+  const numA = parseInt(a.level_id.match(/\d+/)?.[0] || 0);
+  const numB = parseInt(b.level_id.match(/\d+/)?.[0] || 0);
+  return numA - numB;
+});
 
-function GameScene() {
+function GameScene({ levelData }) {
   const playerRef = useRef();
   const enemyRef = useRef();
   const { lastPulseOrigin, lastPulseTime } = useScanner();
@@ -39,19 +41,23 @@ function GameScene() {
     occlusion: { value: LIDAR_DEFAULTS.OCCLUSION_ENABLED },
   });
 
+  // Calculate start position when level changes
+  const startPos = useMemo(() => {
+    if (!levelData) return [0, 5, 0];
+    const startNode = levelData.layout.flatMap((row, z) =>
+      row.split('').map((char, x) => ({ char, x, z }))
+    ).find(n => n.char === 'S');
+    return startNode ? [startNode.x * GAME_CONFIG.CELL_SIZE, 2, startNode.z * GAME_CONFIG.CELL_SIZE] : [0, 5, 0];
+  }, [levelData]);
+
   useFrame(() => {
     // Move light to pulse origin
     if (lightRef.current) {
       lightRef.current.position.set(lastPulseOrigin[0], lastPulseOrigin[1], lastPulseOrigin[2]);
-
-      // Optional: Fade light intensity based on pulse time?
-      // Actually, for shadow mapping, we need the light to be "on" to cast shadows.
-      // But we don't want it to illuminate the scene normally if we want pitch black.
-      // However, our LidarMaterial uses the light intensity to mask the Lidar effect.
-      // So we DO want it to be on.
-      // We can set decay to match Lidar range.
     }
   });
+
+  if (!levelData) return null;
 
   return (
     <>
@@ -70,14 +76,17 @@ function GameScene() {
       {/* Ambient light for base visibility (very low) */}
       <ambientLight intensity={0.02} />
 
-      <LevelBuilder levelData={level1Data} playerRef={playerRef} enemyRef={enemyRef} lidarParams={lidarParams} />
-      <Player startPosition={startPos} playerRef={playerRef} />
-      <Minimap levelData={level1Data} playerRef={playerRef} enemyRef={enemyRef} />
+      <LevelBuilder levelData={levelData} playerRef={playerRef} enemyRef={enemyRef} lidarParams={lidarParams} />
+      <Player startPosition={startPos} playerRef={playerRef} key={levelData.level_id} />
+      {/* Key on Player forces remount on level change to reset position */}
+      <Minimap levelData={levelData} playerRef={playerRef} enemyRef={enemyRef} />
     </>
   );
 }
 
 function App() {
+  const [currentLevel, setCurrentLevel] = useState(allLevels[0]);
+
   return (
     <GameProvider>
       <NoiseProvider>
@@ -87,7 +96,7 @@ function App() {
               <Canvas shadows camera={{ fov: 75 }}>
                 <Suspense fallback={null}>
                   <Physics gravity={[0, -9.81, 0]}>
-                    <GameScene />
+                    <GameScene levelData={currentLevel} />
                   </Physics>
                   <Stats />
                 </Suspense>
@@ -112,6 +121,11 @@ function App() {
                 Audio assets from Pixabay.com
               </div>
               <HUD />
+              <LevelSelector
+                levels={allLevels}
+                currentLevelId={currentLevel?.level_id}
+                onLevelSelect={setCurrentLevel}
+              />
             </div>
           </AudioProvider>
         </ScannerProvider>

@@ -8,8 +8,9 @@ import Enemy from './Enemy';
 import { LidarMaterial } from '../materials/LidarMaterial';
 import * as THREE from 'three';
 
-const CELL_SIZE = 3;
-const WALL_HEIGHT = 5;
+import { GAME_CONFIG } from '../constants/GameConstants';
+
+const { CELL_SIZE, WALL_HEIGHT } = GAME_CONFIG;
 
 // Shared material manager
 const useLidarMaterials = (lidarParams) => {
