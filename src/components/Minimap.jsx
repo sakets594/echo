@@ -51,9 +51,18 @@ const Minimap = ({ levelData, playerRef, enemyRef }) => {
         });
 
         // Add Player Arrow
-        const playerGeo = new THREE.ConeGeometry(1, 2, 3);
+                const playerShape = new THREE.Shape();
+        // A symmetrical chevron shape defined with a counter-clockwise path.
+        // This ensures the shape's front face is correctly oriented.
+        playerShape.moveTo(0, 1.5);      // Tip
+        playerShape.lineTo(-0.75, -0.75); // Back-left
+        playerShape.lineTo(0, 0);        // Center-indent
+        playerShape.lineTo(0.75, -0.75);  // Back-right
+        playerShape.closePath();         // Connect back to tip
+        const playerGeo = new THREE.ShapeGeometry(playerShape);
         const playerMat = new THREE.MeshBasicMaterial({ color: '#00ff00' });
         const playerMesh = new THREE.Mesh(playerGeo, playerMat);
+        playerMesh.scale.set(1.5, 1.5, 1.5);
         playerMesh.rotation.x = -Math.PI / 2; // Point up (relative to map)
         playerMesh.name = 'playerArrow';
         minimapScene.add(playerMesh);
@@ -185,9 +194,11 @@ const Minimap = ({ levelData, playerRef, enemyRef }) => {
         if (arrow) {
             arrow.position.set(playerPos.x, 0, playerPos.z);
             // rotation needs to match player rotation (y-axis)
-            // We can get rotation from camera or rigid body quaternion
-            const rotation = camera.rotation.y;
-            arrow.rotation.z = -rotation; // Rotate arrow to match facing
+            // We get the forward direction of the camera and calculate the angle in the XZ plane
+            const playerDirection = new THREE.Vector3();
+            camera.getWorldDirection(playerDirection);
+            const angle = Math.atan2(playerDirection.x, playerDirection.z);
+            arrow.rotation.z = angle + Math.PI; // Rotate arrow to match facing (add PI to flip 180deg)
         }
 
         // Update Pulse Ring
