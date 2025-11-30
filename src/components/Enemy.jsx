@@ -4,6 +4,7 @@ import { RigidBody } from '@react-three/rapier';
 import { Vector3 } from 'three';
 import { useNoise } from '../contexts/NoiseContext';
 import { useGame } from '../contexts/GameContext';
+import { useAudio } from '../contexts/AudioContext';
 
 const ENEMY_HEIGHT = 2.5;
 const ENEMY_SIZE = 1;
@@ -12,10 +13,13 @@ const Enemy = ({ spawnPosition, playerRef }) => {
     const rigidBodyRef = useRef();
     const { noiseLevel } = useNoise();
     const { loseGame, gameState } = useGame();
+    const { playSound } = useAudio();
     const [state, setState] = useState('patrol'); // 'patrol', 'stalk', 'hunt'
     const [targetPosition, setTargetPosition] = useState(new Vector3(...spawnPosition));
     const [lastNoisePosition, setLastNoisePosition] = useState(new Vector3(...spawnPosition));
     const lastNoiseLevel = useRef(0);
+    const lastFootstepTime = useRef(0);
+    const previousState = useRef('patrol');
 
     // Patrol waypoints (simple back and forth for now)
     const patrolWaypoints = useRef([
@@ -39,11 +43,24 @@ const Enemy = ({ spawnPosition, playerRef }) => {
 
         // State transitions
         if (noiseLevel > 80) {
+            // Play hunt sound when entering hunt mode
+            if (previousState.current !== 'hunt' && playerRef.current && rigidBodyRef.current) {
+                const enemyPos = rigidBodyRef.current.translation();
+                const playerPos = playerRef.current.translation();
+                playSound('hunt', {
+                    position: [enemyPos.x, enemyPos.y, enemyPos.z],
+                    listenerPosition: [playerPos.x, playerPos.y, playerPos.z],
+                    intensity: 1.0
+                });
+            }
             setState('hunt');
+            previousState.current = 'hunt';
         } else if (noiseLevel > 50) {
             setState('stalk');
+            previousState.current = 'stalk';
         } else {
             setState('patrol');
+            previousState.current = 'patrol';
         }
     }, [noiseLevel, gameState, playerRef]);
 
@@ -111,6 +128,37 @@ const Enemy = ({ spawnPosition, playerRef }) => {
 
         if (distToPlayer < 1.5) {
             loseGame();
+        }
+
+        // Play footstep sounds based on movement and state
+        const currentTime = Date.now() / 1000; // Convert to seconds
+        let footstepInterval;
+        let footstepIntensity;
+
+        switch (state) {
+            case 'hunt':
+                footstepInterval = 0.3; // Fast footsteps
+                footstepIntensity = 1.0; // Loud
+                break;
+            case 'stalk':
+                footstepInterval = 0.5; // Medium footsteps
+                footstepIntensity = 0.6; // Medium volume
+                break;
+            case 'patrol':
+            default:
+                footstepInterval = 0.7; // Slow footsteps
+                footstepIntensity = 0.3; // Quiet
+                break;
+        }
+
+        // Play footstep if enough time has passed and enemy is moving
+        if (distance > 0.5 && currentTime - lastFootstepTime.current > footstepInterval) {
+            playSound('footstep', {
+                position: [enemyPos.x, enemyPos.y, enemyPos.z],
+                listenerPosition: [playerPos.x, playerPos.y, playerPos.z],
+                intensity: footstepIntensity
+            });
+            lastFootstepTime.current = currentTime;
         }
     });
 

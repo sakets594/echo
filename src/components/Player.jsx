@@ -6,6 +6,7 @@ import { Vector3 } from 'three';
 import { useNoise } from '../contexts/NoiseContext';
 import { useGame } from '../contexts/GameContext';
 import { useScanner } from '../contexts/ScannerContext';
+import { useAudio } from '../contexts/AudioContext';
 
 const WALK_SPEED = 5;
 const CROUCH_SPEED = 2.5;
@@ -23,6 +24,7 @@ const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
     const { setMovementNoise, addNoise } = useNoise();
     const { gameState, toggleDebugLights } = useGame();
     const { emitPulse } = useScanner();
+    const { playSound } = useAudio();
 
     // Expose rigidBodyRef to parent
     React.useEffect(() => {
@@ -49,6 +51,7 @@ const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
     const toggleDebugLightsRef = useRef(toggleDebugLights);
     const emitPulseRef = useRef(emitPulse);
     const addNoiseRef = useRef(addNoise);
+    const lastFootstepTime = useRef(0);
 
     useEffect(() => {
         gameStateRef.current = gameState;
@@ -85,6 +88,12 @@ const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
                         const success = emitPulseRef.current([pos.x, pos.y, pos.z], type);
                         if (success) {
                             addNoiseRef.current(CLAP_NOISE);
+                            // Play clap sound at player position
+                            playSound('clap', {
+                                position: [pos.x, pos.y, pos.z],
+                                listenerPosition: [pos.x, pos.y, pos.z],
+                                intensity: 1.0
+                            });
                             console.log(`Clap! Pulse emitted at ${pos.x}, ${pos.y}, ${pos.z} with type ${type}`);
                         }
                     }
@@ -169,6 +178,30 @@ const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
         const pos = rigidBodyRef.current.translation();
         const cameraHeight = isCrouching ? 0.75 : 1.5;
         camera.position.set(pos.x, pos.y + cameraHeight, pos.z);
+
+        // Play player footstep sounds based on movement
+        if (isMoving && !isCrouching) {
+            const currentTime = Date.now() / 1000;
+            let footstepInterval;
+            let footstepIntensity;
+
+            if (isSprinting) {
+                footstepInterval = 0.3; // Fast footsteps when sprinting
+                footstepIntensity = 0.6;
+            } else {
+                footstepInterval = 0.5; // Normal walking pace
+                footstepIntensity = 0.4;
+            }
+
+            if (currentTime - lastFootstepTime.current > footstepInterval) {
+                playSound('playerFootstep', {
+                    position: [pos.x, pos.y, pos.z],
+                    listenerPosition: [pos.x, pos.y, pos.z],
+                    intensity: footstepIntensity
+                });
+                lastFootstepTime.current = currentTime;
+            }
+        }
 
         // Update debug UI
         const debugEl = document.getElementById('debug-pos');

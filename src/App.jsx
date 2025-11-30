@@ -8,6 +8,7 @@ import HUD from './components/HUD';
 import { GameProvider } from './contexts/GameContext';
 import { NoiseProvider } from './contexts/NoiseContext';
 import { ScannerProvider } from './contexts/ScannerContext';
+import { AudioProvider } from './contexts/AudioContext';
 import level1Data from './levels/level1.json';
 
 // Find start position from level data
@@ -38,17 +39,19 @@ function App() {
     <GameProvider>
       <NoiseProvider>
         <ScannerProvider>
-          <div style={{ width: '100vw', height: '100vh' }}>
-            <Canvas>
-              <Suspense fallback={null}>
-                <Physics gravity={[0, -9.81, 0]}>
-                  <GameScene />
-                </Physics>
-                <Stats />
-              </Suspense>
-            </Canvas>
-            <HUD />
-          </div>
+          <AudioProvider>
+            <div style={{ width: '100vw', height: '100vh' }}>
+              <Canvas>
+                <Suspense fallback={null}>
+                  <Physics gravity={[0, -9.81, 0]}>
+                    <GameScene />
+                  </Physics>
+                  <Stats />
+                </Suspense>
+              </Canvas>
+              <HUD />
+            </div>
+          </AudioProvider>
         </ScannerProvider>
       </NoiseProvider>
     </GameProvider>
