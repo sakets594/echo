@@ -5,63 +5,62 @@ import { useGame } from '../contexts/GameContext';
 import { useScanner } from '../contexts/ScannerContext';
 import { useFrame } from '@react-three/fiber';
 import Enemy from './Enemy';
-import { lidarVertexShader, lidarFragmentShader } from '../shaders/LidarShader';
+import { LidarMaterial } from '../materials/LidarMaterial';
 import * as THREE from 'three';
 
 const CELL_SIZE = 3;
-const WALL_HEIGHT = 5; // Increased from 3 to 5 for better clearance
+const WALL_HEIGHT = 5;
 
-// Shared material manager - creates materials once and updates them uniformly
-const useLidarMaterials = () => {
+// Shared material manager
+const useLidarMaterials = (lidarParams) => {
   const materialsRef = useRef({});
   const { lastPulseTime, lastPulseOrigin, lastPulseType } = useScanner();
   const { debugLights } = useGame();
 
-  // Create materials for different colors if they don't exist
-  // IMPORTANT: Memoized with useCallback to prevent recreation on every render
   const getMaterial = useCallback((baseColor) => {
     if (!materialsRef.current[baseColor]) {
-      console.log('[useLidarMaterials] Creating new material for color:', baseColor);
-      materialsRef.current[baseColor] = new THREE.ShaderMaterial({
-        vertexShader: lidarVertexShader,
-        fragmentShader: lidarFragmentShader,
-        uniforms: {
-          uPulseOrigin: { value: new THREE.Vector3() },
-          uPulseTime: { value: -1000 },
-          uCurrentTime: { value: 0 },
-          uBaseColor: { value: new THREE.Color(baseColor) },
-          uPulseType: { value: 0 },
-          uDebugLights: { value: false },
-        },
+      materialsRef.current[baseColor] = new LidarMaterial({
+        color: baseColor,
+        roughness: 0.8,
+        metalness: 0.2,
       });
     }
     return materialsRef.current[baseColor];
-  }, []); // Empty deps - function is stable
+  }, []);
 
-  // Update ALL materials every frame - ensures uniform updates
   useFrame(() => {
     const currentTime = performance.now() / 1000;
     Object.values(materialsRef.current).forEach((material) => {
-      material.uniforms.uCurrentTime.value = currentTime;
-      material.uniforms.uPulseTime.value = lastPulseTime;
-      material.uniforms.uPulseOrigin.value.set(...lastPulseOrigin);
-      material.uniforms.uPulseType.value = lastPulseType;
-      material.uniforms.uDebugLights.value = debugLights;
-    });
+      if (material.uniforms) {
+        material.uniforms.uCurrentTime.value = currentTime;
+        material.uniforms.uPulseTime.value = lastPulseTime;
+        material.uniforms.uPulseOrigin.value.set(...lastPulseOrigin);
+        material.uniforms.uPulseType.value = lastPulseType;
+        material.uniforms.uDebugLights.value = debugLights;
 
-    // Debug log occasionally
-    if (Math.random() < 0.01) {
-      console.log('[useLidarMaterials] Updated all materials. debugLights:', debugLights, 'materials count:', Object.keys(materialsRef.current).length);
-    }
+        // Debug Pulse Updates
+        if (lastPulseTime > 0 && currentTime - lastPulseTime < 0.1) {
+          console.log(`[LevelBuilder] Pulse Active! Time: ${currentTime.toFixed(2)}, PulseTime: ${lastPulseTime.toFixed(2)}, Origin: ${lastPulseOrigin}`);
+        }
+
+        // Update tweakable params
+        if (lidarParams) {
+          if (material.uniforms.uWaveSpeed) material.uniforms.uWaveSpeed.value = lidarParams.waveSpeed;
+          if (material.uniforms.uFadeDuration) material.uniforms.uFadeDuration.value = lidarParams.fadeDuration;
+          if (material.uniforms.uMaxDistance) material.uniforms.uMaxDistance.value = lidarParams.maxDistance;
+          if (material.uniforms.uOcclusion) material.uniforms.uOcclusion.value = lidarParams.occlusion;
+        }
+      }
+    });
   });
 
   return { getMaterial };
 };
 
-const LevelBuilder = ({ levelData, playerRef, enemyRef }) => {
+const LevelBuilder = ({ levelData, playerRef, enemyRef, lidarParams }) => {
   const { layout, legend } = levelData;
   const { collectKey, hasKey, winGame } = useGame();
-  const { getMaterial } = useLidarMaterials(); // Use shared materials
+  const { getMaterial } = useLidarMaterials(lidarParams);
 
   // Find entity spawn position
   const entitySpawnPos = useMemo(() => {
@@ -79,23 +78,23 @@ const LevelBuilder = ({ levelData, playerRef, enemyRef }) => {
   const components = useMemo(() => {
     const items = [];
 
-    // Create a single ground plane for the entire level
+    // Create a single ground plane
     const levelWidth = layout[0].length * CELL_SIZE;
     const levelDepth = layout.length * CELL_SIZE;
     items.push(
       <RigidBody key="ground" type="fixed" colliders="cuboid" position={[levelWidth / 2 - CELL_SIZE / 2, -0.5, levelDepth / 2 - CELL_SIZE / 2]}>
-        <Box args={[levelWidth, 1, levelDepth]} material={getMaterial("#222222")} />
+        <Box args={[levelWidth, 1, levelDepth]} material={getMaterial("#222222")} receiveShadow />
       </RigidBody>
     );
 
-    // Add ceiling to hide wall tops (visual only, no collision)
-    console.log('[LevelBuilder] Adding ceiling at height:', WALL_HEIGHT + 0.1);
+    // Ceiling
     items.push(
       <Box
         key="ceiling"
         args={[levelWidth, 0.2, levelDepth]}
         position={[levelWidth / 2 - CELL_SIZE / 2, WALL_HEIGHT + 0.1, levelDepth / 2 - CELL_SIZE / 2]}
         material={getMaterial("#111111")}
+        receiveShadow
       />
     );
 
@@ -111,6 +110,8 @@ const LevelBuilder = ({ levelData, playerRef, enemyRef }) => {
                 position={[position[0], WALL_HEIGHT / 2, position[2]]}
                 args={[CELL_SIZE, WALL_HEIGHT, CELL_SIZE]}
                 material={getMaterial("#888888")}
+                castShadow
+                receiveShadow
               />
             </RigidBody>
           );
@@ -121,6 +122,8 @@ const LevelBuilder = ({ levelData, playerRef, enemyRef }) => {
                 position={[position[0], WALL_HEIGHT / 2, position[2]]}
                 args={[CELL_SIZE * 0.5, WALL_HEIGHT, CELL_SIZE * 0.5]}
                 material={getMaterial("#555555")}
+                castShadow
+                receiveShadow
               />
             </RigidBody>
           );
@@ -131,6 +134,8 @@ const LevelBuilder = ({ levelData, playerRef, enemyRef }) => {
                 position={[position[0], 0.2, position[2]]}
                 args={[CELL_SIZE, 0.4, CELL_SIZE]}
                 material={getMaterial("#654321")}
+                castShadow
+                receiveShadow
               />
             </RigidBody>
           );

@@ -1,5 +1,5 @@
 import React, { Suspense, useRef } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useFrame } from '@react-three/fiber';
 import { Stats } from '@react-three/drei';
 import { Physics } from '@react-three/rapier';
 import LevelBuilder from './components/LevelBuilder';
@@ -12,25 +12,65 @@ import { AudioProvider } from './contexts/AudioContext';
 import Minimap from './components/Minimap';
 import level1Data from './levels/level1.json';
 
+import { useScanner } from './contexts/ScannerContext';
+import { useControls } from 'leva';
+
+import { LIDAR_DEFAULTS } from './constants/LidarConstants';
+
 // Find start position from level data
 const startNode = level1Data.layout.flatMap((row, z) =>
   row.split('').map((char, x) => ({ char, x, z }))
 ).find(n => n.char === 'S');
 
 const startPos = startNode
-  ? [startNode.x * 3, 5, startNode.z * 3]
+  ? [startNode.x * 5, 2, startNode.z * 5]
   : [0, 5, 0];
 
 function GameScene() {
   const playerRef = useRef();
   const enemyRef = useRef();
+  const { lastPulseOrigin, lastPulseTime } = useScanner();
+  const lightRef = useRef();
+
+  const lidarParams = useControls('Lidar Pulse', {
+    waveSpeed: { value: LIDAR_DEFAULTS.WAVE_SPEED, min: 5.0, max: 50.0 },
+    fadeDuration: { value: LIDAR_DEFAULTS.FADE_DURATION, min: 0.05, max: 5.0 },
+    maxDistance: { value: LIDAR_DEFAULTS.MAX_DISTANCE, min: 10.0, max: 100.0 },
+    occlusion: { value: LIDAR_DEFAULTS.OCCLUSION_ENABLED },
+  });
+
+  useFrame(() => {
+    // Move light to pulse origin
+    if (lightRef.current) {
+      lightRef.current.position.set(lastPulseOrigin[0], lastPulseOrigin[1], lastPulseOrigin[2]);
+
+      // Optional: Fade light intensity based on pulse time?
+      // Actually, for shadow mapping, we need the light to be "on" to cast shadows.
+      // But we don't want it to illuminate the scene normally if we want pitch black.
+      // However, our LidarMaterial uses the light intensity to mask the Lidar effect.
+      // So we DO want it to be on.
+      // We can set decay to match Lidar range.
+    }
+  });
 
   return (
     <>
-      {/* Removed ambient and directional lights for darkness mode */}
-      {/* Geometry is now only visible via the scanner shader */}
+      {/* Pulse Light for Shadows */}
+      <pointLight
+        ref={lightRef}
+        position={[0, 0, 0]}
+        intensity={10.0}
+        distance={lidarParams.maxDistance}
+        decay={0}
+        castShadow
+        shadow-mapSize={[1024, 1024]}
+        shadow-bias={-0.001}
+      />
 
-      <LevelBuilder levelData={level1Data} playerRef={playerRef} enemyRef={enemyRef} />
+      {/* Ambient light for base visibility (very low) */}
+      <ambientLight intensity={0.02} />
+
+      <LevelBuilder levelData={level1Data} playerRef={playerRef} enemyRef={enemyRef} lidarParams={lidarParams} />
       <Player startPosition={startPos} playerRef={playerRef} />
       <Minimap levelData={level1Data} playerRef={playerRef} enemyRef={enemyRef} />
     </>
@@ -44,7 +84,7 @@ function App() {
         <ScannerProvider>
           <AudioProvider>
             <div style={{ width: '100vw', height: '100vh' }}>
-              <Canvas>
+              <Canvas shadows camera={{ fov: 75 }}>
                 <Suspense fallback={null}>
                   <Physics gravity={[0, -9.81, 0]}>
                     <GameScene />

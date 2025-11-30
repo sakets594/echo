@@ -3,6 +3,7 @@ import { useFrame, createPortal, useThree } from '@react-three/fiber';
 import { useFBO, OrthographicCamera, Hud } from '@react-three/drei';
 import * as THREE from 'three';
 import { useScanner } from '../contexts/ScannerContext';
+import { LIDAR_DEFAULTS } from '../constants/LidarConstants';
 
 const CELL_SIZE = 3;
 const MINIMAP_SIZE = 200; // Size in pixels
@@ -84,17 +85,54 @@ const Minimap = ({ levelData, playerRef, enemyRef }) => {
 
         // Update Fog of War based on Pulse
         const timeSincePulse = currentTime - lastPulseTime;
-        if (timeSincePulse < 2.0) { // Pulse is active
-            const pulseRadius = timeSincePulse * 20; // Speed of sound/pulse
+        const pulseDuration = LIDAR_DEFAULTS.MAX_DISTANCE / LIDAR_DEFAULTS.WAVE_SPEED;
+
+        if (timeSincePulse < pulseDuration) { // Pulse is active
+            const pulseRadius = timeSincePulse * LIDAR_DEFAULTS.WAVE_SPEED;
             const pulseOriginVec = new THREE.Vector3(lastPulseOrigin[0], 0, lastPulseOrigin[2]);
+
+
+            // Update Pulse Ring
+            const ring = minimapScene.getObjectByName('pulseRing');
+            if (ring) {
+                const timeSincePulse = (performance.now() / 1000) - lastPulseTime;
+                if (timeSincePulse < pulseDuration) {
+                    ring.position.set(lastPulseOrigin[0], 0, lastPulseOrigin[2]);
+                    const scale = timeSincePulse * LIDAR_DEFAULTS.WAVE_SPEED;
+                    ring.scale.set(scale, scale, 1);
+                    ring.material.opacity = 1.0 - (timeSincePulse / pulseDuration);
+                } else {
+                    ring.material.opacity = 0;
+                }
+            }
+
+            // Raycaster for occlusion
+            const raycaster = new THREE.Raycaster();
+            const directions = []; // Reuse vectors if possible, but for now create new
 
             // Check unvisited walls
             Object.entries(wallsRef.current).forEach(([key, mesh]) => {
                 if (!visitedWalls.current.has(key)) {
                     const dist = mesh.position.distanceTo(pulseOriginVec);
+
                     if (dist < pulseRadius && dist > pulseRadius - 5) { // Within the expanding wavefront
-                        mesh.visible = true;
-                        visitedWalls.current.add(key);
+                        // Perform Raycast to check for occlusion
+                        const direction = new THREE.Vector3().subVectors(mesh.position, pulseOriginVec).normalize();
+                        raycaster.set(pulseOriginVec, direction);
+
+                        // Intersect with ALL walls in the minimap scene
+                        // Note: This can be expensive. Optimization: Only intersect with walls < dist
+                        const intersects = raycaster.intersectObjects(minimapScene.children);
+
+                        if (intersects.length > 0) {
+                            // The first hit should be the target mesh itself (or very close to it)
+                            // If the first hit is significantly closer than the target mesh, it's occluded
+                            const firstHit = intersects[0];
+                            if (firstHit.object === mesh || firstHit.distance >= dist - 1.0) {
+                                mesh.visible = true;
+                                visitedWalls.current.add(key);
+                            }
+                        }
                     }
                 }
             });
@@ -106,9 +144,25 @@ const Minimap = ({ levelData, playerRef, enemyRef }) => {
                 const distToEnemy = enemyVec.distanceTo(pulseOriginVec);
 
                 if (distToEnemy < pulseRadius && distToEnemy > pulseRadius - 5) {
-                    // Monster Hit!
-                    lastEnemyRevealTime.current = currentTime;
-                    revealedEnemyPos.current.copy(enemyVec);
+                    // Raycast for monster occlusion
+                    const direction = new THREE.Vector3().subVectors(enemyVec, pulseOriginVec).normalize();
+                    raycaster.set(pulseOriginVec, direction);
+                    const intersects = raycaster.intersectObjects(minimapScene.children);
+
+                    // Check if anything blocks the view to the enemy
+                    let occluded = false;
+                    if (intersects.length > 0) {
+                        // If we hit a wall before the enemy distance, it's occluded
+                        if (intersects[0].distance < distToEnemy - 1.0) {
+                            occluded = true;
+                        }
+                    }
+
+                    if (!occluded) {
+                        // Monster Hit!
+                        lastEnemyRevealTime.current = currentTime;
+                        revealedEnemyPos.current.copy(enemyVec);
+                    }
                 }
             }
         }
@@ -140,11 +194,13 @@ const Minimap = ({ levelData, playerRef, enemyRef }) => {
         const ring = minimapScene.getObjectByName('pulseRing');
         if (ring) {
             const timeSincePulse = (performance.now() / 1000) - lastPulseTime;
-            if (timeSincePulse < 2.0) {
+            const pulseDuration = LIDAR_DEFAULTS.MAX_DISTANCE / LIDAR_DEFAULTS.WAVE_SPEED;
+
+            if (timeSincePulse < pulseDuration) {
                 ring.position.set(lastPulseOrigin[0], 0, lastPulseOrigin[2]);
-                const scale = timeSincePulse * 10; // Expand
+                const scale = timeSincePulse * LIDAR_DEFAULTS.WAVE_SPEED;
                 ring.scale.set(scale, scale, 1);
-                ring.material.opacity = 1.0 - (timeSincePulse / 2.0);
+                ring.material.opacity = 1.0 - (timeSincePulse / pulseDuration);
             } else {
                 ring.material.opacity = 0;
             }
