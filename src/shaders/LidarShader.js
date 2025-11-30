@@ -19,9 +19,10 @@ uniform bool uDebugLights; // True = Full Visibility
 varying vec3 vWorldPos;
 
 const float WAVE_SPEED = 10.0; // meters per second
-const float FADE_DURATION = 5.0; // Increased from 3.0s to 5.0s
+const float FADE_DURATION = 2.0; // Reduced from 5.0s to 2.0s for faster dissipation
 const vec3 GLOW_COLOR = vec3(0.0, 1.0, 1.0); // Cyan #00FFFF
 const float MIN_VISIBILITY = 0.05; // 5% base visibility
+const float MAX_DISTANCE = 30.0; // Maximum effective distance for lidar wave
 
 void main() {
   // If debug lights are on, render full base color
@@ -57,6 +58,10 @@ void main() {
   // Calculate distance from pulse origin
   float distanceFromOrigin = distance(vWorldPos, uPulseOrigin);
   
+  // Distance-based attenuation (quadratic falloff for smooth diminishing)
+  float distanceAttenuation = 1.0 - clamp(distanceFromOrigin / MAX_DISTANCE, 0.0, 1.0);
+  distanceAttenuation = pow(distanceAttenuation, 2.0); // Quadratic falloff
+  
   // Calculate where the wavefront should be at this time
   float wavefrontDistance = timeSincePulse * WAVE_SPEED;
   
@@ -72,11 +77,12 @@ void main() {
   // Calculate brightness based on time since being hit
   float timeHit = timeSincePulse - (distanceFromOrigin / WAVE_SPEED);
   float brightness = 1.0 - clamp(timeHit / FADE_DURATION, 0.0, 1.0);
-  brightness = brightness * wasHit;
+  brightness = brightness * wasHit * distanceAttenuation; // Apply distance attenuation
   
   // Add extra brightness at the wavefront edge
   float wavefrontGlow = 1.0 - smoothstep(0.0, wavefrontThickness, distanceToWavefront);
   wavefrontGlow *= step(0.0, timeSincePulse); // Only show if pulse has been emitted
+  wavefrontGlow *= distanceAttenuation; // Apply distance attenuation to wavefront too
   
   // Combine effects
   float totalBrightness = max(brightness, wavefrontGlow);
