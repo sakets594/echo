@@ -18,7 +18,8 @@ export const UI_TEXT = {
         { key: "Mouse", action: "Look" },
         { key: "Shift", action: "Crouch (Quiet)" },
         { key: "Ctrl", action: "Sprint (Loud)" },
-        { key: "Space", action: "Sonar Ping" }
+        { key: "Space", action: "Sonar Ping" },
+        { key: "Esc", action: "Pause Game" }
     ],
     LEGEND: [
         { color: "#FFD700", label: "Access Token" },
