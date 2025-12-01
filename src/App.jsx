@@ -1,11 +1,11 @@
-import React, { Suspense, useRef, useState, useMemo, useEffect } from 'react';
+import React, { Suspense, useRef, useState, useMemo, useEffect, useCallback } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Stats } from '@react-three/drei';
 import { Physics } from '@react-three/rapier';
 import LevelBuilder from './components/LevelBuilder';
 import Player from './components/Player';
 import HUD from './components/HUD';
-import { GameProvider } from './contexts/GameContext';
+import { GameProvider, useGame } from './contexts/GameContext';
 import { NoiseProvider } from './contexts/NoiseContext';
 import { ScannerProvider } from './contexts/ScannerContext';
 import { AudioProvider } from './contexts/AudioContext';
@@ -13,6 +13,7 @@ import Minimap from './components/Minimap';
 import LevelSelector from './components/LevelSelector';
 
 import { useScanner } from './contexts/ScannerContext';
+import { useNoise } from './contexts/NoiseContext';
 import { useControls } from 'leva';
 
 import { LIDAR_DEFAULTS } from './constants/LidarConstants';
@@ -28,10 +29,13 @@ const allLevels = Object.values(levelModules).map(m => m.default || m).sort((a, 
   return numA - numB;
 });
 
-function GameScene({ levelData }) {
+import LevelCompleteOverlay from './components/LevelCompleteOverlay';
+
+function GameScene({ levelData, onLevelComplete }) {
   const playerRef = useRef();
   const enemyRef = useRef();
   const { lastPulseOrigin, lastPulseTime } = useScanner();
+  const { gameState } = useGame();
   const lightRef = useRef();
 
   const lidarParams = useControls('Lidar Pulse', {
@@ -61,6 +65,13 @@ function GameScene({ levelData }) {
       lightRef.current.position.set(lastPulseOrigin[0], lastPulseOrigin[1], lastPulseOrigin[2]);
     }
   });
+
+  // Watch for win state
+  useEffect(() => {
+    if (gameState === 'won') {
+      onLevelComplete();
+    }
+  }, [gameState, onLevelComplete]);
 
   if (!levelData) return null;
 
@@ -92,50 +103,155 @@ function GameScene({ levelData }) {
 function App() {
   const [currentLevel, setCurrentLevel] = useState(allLevels[0]);
 
+  // We need access to context functions, but App is outside the providers.
+  // So we create a wrapper or move the logic inside a child component.
+  // For simplicity, let's create a GameContent component.
   return (
     <GameProvider>
       <NoiseProvider>
         <ScannerProvider>
           <AudioProvider>
-            <div style={{ width: '100vw', height: '100vh' }}>
-              <Canvas shadows camera={{ fov: 75 }}>
-                <Suspense fallback={null}>
-                  <Physics gravity={[0, -9.81, 0]}>
-                    <GameScene levelData={currentLevel} />
-                  </Physics>
-                  <Stats />
-                </Suspense>
-              </Canvas>
-              <div id="debug-ui" style={{
-                position: 'absolute',
-                top: '10px',
-                left: '10px',
-                color: 'white',
-                fontFamily: 'monospace',
-                pointerEvents: 'none'
-              }}></div>
-              <div style={{
-                position: 'absolute',
-                bottom: '10px',
-                right: '10px',
-                color: 'rgba(255, 255, 255, 0.5)',
-                fontFamily: 'monospace',
-                fontSize: '12px',
-                pointerEvents: 'none'
-              }}>
-                Audio assets from Pixabay.com
-              </div>
-              <HUD />
-              <LevelSelector
-                levels={allLevels}
-                currentLevelId={currentLevel?.level_id}
-                onLevelSelect={setCurrentLevel}
-              />
-            </div>
+            <GameContent
+              currentLevel={currentLevel}
+              setCurrentLevel={setCurrentLevel}
+              allLevels={allLevels}
+            />
           </AudioProvider>
         </ScannerProvider>
       </NoiseProvider>
     </GameProvider>
+  );
+}
+
+import StartScreen from './components/StartScreen';
+import PauseScreen from './components/PauseScreen';
+
+function GameContent({ currentLevel, setCurrentLevel, allLevels }) {
+  const { gameState, setGameState, resetGameState, saveProgress, loadProgress, startGame, pauseGame, resumeGame } = useGame();
+  const { resetNoise } = useNoise();
+
+  // Handle Esc key for pausing
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.code === 'Escape') {
+        if (gameState === 'playing') {
+          pauseGame();
+        } else if (gameState === 'paused') {
+          resumeGame();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [gameState, pauseGame, resumeGame]);
+
+  const handleLevelComplete = useCallback(() => {
+    console.log("Level Complete! Transitioning...");
+    setGameState('level_transition');
+    saveProgress(currentLevel.level_id);
+
+    setTimeout(() => {
+      const currentIndex = allLevels.findIndex(l => l.level_id === currentLevel.level_id);
+      const nextLevel = allLevels[currentIndex + 1];
+
+      if (nextLevel) {
+        console.log("Loading next level:", nextLevel.level_id);
+        setCurrentLevel(nextLevel);
+        resetGameState();
+        resetNoise();
+      } else {
+        console.log("Game Complete!");
+        // Handle Game Complete (maybe loop back to 1 or show credits)
+        // For now, just reset to level 1
+        setCurrentLevel(allLevels[0]);
+        resetGameState();
+        resetNoise();
+      }
+    }, 3000); // 3 seconds delay
+  }, [currentLevel, allLevels, setGameState, saveProgress, resetGameState, resetNoise, setCurrentLevel]);
+
+  const handleContinue = useCallback(() => {
+    const savedLevelId = loadProgress();
+    const savedLevel = allLevels.find(l => parseInt(l.level_id.match(/\d+/)?.[0] || 0) === savedLevelId);
+    if (savedLevel) {
+      setCurrentLevel(savedLevel);
+    }
+    startGame();
+  }, [allLevels, loadProgress, setCurrentLevel, startGame]);
+
+  const handleRestart = useCallback(() => {
+    resetGameState();
+    resetNoise();
+    // Force re-render of level by toggling key or similar, but since we reset state, 
+    // passing a key prop to GameScene or Player usually handles it.
+    // Actually, resetGameState sets 'playing', so we just need to ensure components reset.
+    // The easiest way is to just call startGame() again which sets 'playing'.
+    // But to fully reset physics, we might need to remount.
+    // Let's try just resetting state first.
+    startGame();
+  }, [resetGameState, resetNoise, startGame]);
+
+  const handleQuit = useCallback(() => {
+    setGameState('start');
+    resetGameState();
+    resetNoise();
+  }, [setGameState, resetGameState, resetNoise]);
+
+  const hasSavedProgress = useMemo(() => {
+    const saved = loadProgress();
+    return saved > 1;
+  }, [loadProgress]);
+
+  return (
+    <div style={{ width: '100vw', height: '100vh' }}>
+      {gameState === 'start' && (
+        <StartScreen
+          onContinue={handleContinue}
+          hasSavedProgress={hasSavedProgress}
+        />
+      )}
+      {gameState === 'paused' && (
+        <PauseScreen
+          onRestart={handleRestart}
+          onQuit={handleQuit}
+        />
+      )}
+      <Canvas shadows camera={{ fov: 75 }}>
+        <Suspense fallback={null}>
+          <Physics gravity={[0, -9.81, 0]}>
+            <GameScene levelData={currentLevel} onLevelComplete={handleLevelComplete} />
+          </Physics>
+          <Stats />
+        </Suspense>
+      </Canvas>
+      <div id="debug-ui" style={{
+        position: 'absolute',
+        top: '10px',
+        left: '10px',
+        color: 'white',
+        fontFamily: 'monospace',
+        pointerEvents: 'none'
+      }}></div>
+      <div style={{
+        position: 'absolute',
+        bottom: '10px',
+        right: '10px',
+        color: 'rgba(255, 255, 255, 0.5)',
+        fontFamily: 'monospace',
+        fontSize: '12px',
+        pointerEvents: 'none'
+      }}>
+        Audio assets from Pixabay.com
+      </div>
+      <HUD />
+      {gameState === 'level_transition' && <LevelCompleteOverlay />}
+      <LevelSelector
+        levels={allLevels}
+        currentLevelId={currentLevel?.level_id}
+        onLevelSelect={setCurrentLevel}
+      />
+    </div>
   );
 }
 

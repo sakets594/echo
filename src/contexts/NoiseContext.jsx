@@ -43,10 +43,17 @@ export const NoiseProvider = ({ children }) => {
         setIsMoving(moving);
     }, []);
 
+    const resetNoise = useCallback(() => {
+        setNoiseLevel(0);
+        setCurrentNoiseRate(0);
+        setIsMoving(false);
+    }, []);
+
     const value = {
         noiseLevel,
         addNoise,
         setMovementNoise,
+        resetNoise
     };
 
     return <NoiseContext.Provider value={value}>{children}</NoiseContext.Provider>;

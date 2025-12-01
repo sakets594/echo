@@ -87,7 +87,7 @@ const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
                     if (toggleDebugLightsRef.current) toggleDebugLightsRef.current();
                     break;
                 case 'Space':
-                    // Clap/Scanner pulse
+                    // Sonar/Scanner pulse
                     if (rigidBodyRef.current && gameStateRef.current === 'playing') {
                         const pos = rigidBodyRef.current.translation();
                         const type = event.shiftKey ? 1 : 0;
@@ -95,13 +95,13 @@ const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
                         const success = emitPulseRef.current([pos.x, pos.y, pos.z], type);
                         if (success) {
                             addNoiseRef.current(CLAP_NOISE);
-                            // Play clap sound at player position
+                            // Play sonar sound at player position
                             playSound('clap', {
                                 position: [pos.x, pos.y, pos.z],
                                 listenerPosition: [pos.x, pos.y, pos.z],
                                 intensity: 1.0
                             });
-                            console.log(`Clap! Pulse emitted at ${pos.x}, ${pos.y}, ${pos.z} with type ${type}`);
+                            console.log(`Sonar! Pulse emitted at ${pos.x}, ${pos.y}, ${pos.z} with type ${type}`);
                         }
                     }
                     break;
@@ -139,7 +139,9 @@ const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
 
         // Stop movement if game is not playing
         if (gameState !== 'playing') {
-            rigidBodyRef.current.setLinvel({ x: 0, y: rigidBodyRef.current.linvel().y, z: 0 });
+            if (rigidBodyRef.current) {
+                rigidBodyRef.current.setLinvel({ x: 0, y: rigidBodyRef.current.linvel().y, z: 0 });
+            }
             return;
         }
 
@@ -240,6 +242,7 @@ const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
             <PointerLockControls
                 maxPolarAngle={Math.PI / 2}  // Lock camera at horizon (no looking up)
                 minPolarAngle={Math.PI / 2}  // Lock camera at horizon (no looking down)
+                selector="#root" // Ensure it re-locks correctly
             />
         </>
     );
