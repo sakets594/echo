@@ -96,6 +96,7 @@ function GameScene({ levelData, onLevelComplete }) {
       <Player startPosition={startPos} playerRef={playerRef} key={levelData.level_id} />
       {/* Key on Player forces remount on level change to reset position */}
       <Minimap levelData={levelData} playerRef={playerRef} enemyRef={enemyRef} />
+      <HeartbeatSystem playerRef={playerRef} enemyRef={enemyRef} />
     </>
   );
 }
@@ -125,6 +126,7 @@ function App() {
 
 import StartScreen from './components/StartScreen';
 import PauseScreen from './components/PauseScreen';
+import HeartbeatSystem from './components/HeartbeatSystem';
 
 function GameContent({ currentLevel, setCurrentLevel, allLevels }) {
   const { gameState, setGameState, resetGameState, saveProgress, loadProgress, startGame, pauseGame, resumeGame } = useGame();
@@ -242,7 +244,8 @@ function GameContent({ currentLevel, setCurrentLevel, allLevels }) {
         fontSize: '12px',
         pointerEvents: 'none'
       }}>
-        Audio assets from Pixabay.com
+        Audio assets from Pixabay.com<br />
+        Heartbeat sound from l4rzy/semicute on GitHub
       </div>
       <HUD />
       {gameState === 'level_transition' && <LevelCompleteOverlay />}
@@ -251,6 +254,17 @@ function GameContent({ currentLevel, setCurrentLevel, allLevels }) {
         currentLevelId={currentLevel?.level_id}
         onLevelSelect={setCurrentLevel}
       />
+      <div id="heartbeat-vignette" style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        pointerEvents: 'none',
+        zIndex: 1000,
+        opacity: 0,
+        transition: 'opacity 0.1s ease-out'
+      }}></div>
     </div>
   );
 }

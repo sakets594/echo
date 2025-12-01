@@ -30,7 +30,8 @@ export const AudioProvider = ({ children }) => {
                 const sounds = {
                     'monsterBreathing': '/sounds/monster_breathing.mp3',
                     'playerWalk': '/sounds/player_walk.mp3',
-                    'gameOver': '/sounds/game_over.mp3'
+                    'gameOver': '/sounds/game_over.mp3',
+                    'heartbeat': '/sounds/heartbeat.wav'
                 };
 
                 for (const [key, url] of Object.entries(sounds)) {
@@ -115,6 +116,61 @@ export const AudioProvider = ({ children }) => {
                 break;
             }
 
+            case 'heartbeat': {
+                // Low frequency thump-thump
+                const duration = 0.15; // Short duration for a single beat
+                buffer = ctx.createBuffer(1, sampleRate * duration, sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < data.length; i++) {
+                    const t = i / sampleRate;
+                    const decay = Math.exp(-t * 20); // Faster decay for tighter sound
+                    // Low frequency sine wave (50Hz)
+                    const wave = Math.sin(2 * Math.PI * 50 * t);
+                    // Add a bit of noise for texture
+                    const noise = (Math.random() * 2 - 1) * 0.1;
+                    // Soft attack
+                    const envelope = t < 0.01 ? t / 0.01 : decay;
+                    data[i] = (wave + noise) * envelope * 0.6; // Lower volume
+                }
+                break;
+            }
+
+            case 'monsterBreathing': {
+                // Procedural breathing: Filtered noise
+                const duration = 2.0;
+                buffer = ctx.createBuffer(1, sampleRate * duration, sampleRate);
+                const data = buffer.getChannelData(0);
+
+                // Create noise
+                for (let i = 0; i < data.length; i++) {
+                    data[i] = (Math.random() * 2 - 1);
+                }
+
+                // We can't easily apply a filter node to a buffer directly in this helper without offline context.
+                // So we'll do a simple low-pass filter in the time domain (moving average)
+                // and apply an envelope.
+                const output = new Float32Array(data.length);
+                let lastVal = 0;
+                const alpha = 0.05; // Low pass factor
+
+                for (let i = 0; i < data.length; i++) {
+                    const t = i / sampleRate;
+                    // Modulate filter cutoff (breathing in and out)
+                    // This is hard to do with simple moving average, so let's just shape the volume.
+
+                    // Envelope: Swell in and out
+                    const envelope = Math.sin(Math.PI * (t / duration));
+
+                    // Simple Low Pass
+                    lastVal = lastVal + alpha * (data[i] - lastVal);
+
+                    output[i] = lastVal * envelope * 2.0; // Boost volume a bit
+                }
+
+                buffer.copyToChannel(output, 0);
+                break;
+            }
+
             default:
                 return null;
         }
@@ -148,13 +204,14 @@ export const AudioProvider = ({ children }) => {
         }
     }, []);
 
-    // Play spatial sound
+    // Play sound
     const playSound = useCallback((type, options = {}) => {
         const {
             position = [0, 0, 0],
             intensity = 1.0,
             listenerPosition = [0, 0, 0],
-            loop = false, // Add loop option
+            loop = false,
+            spatial = true, // Default to true for backward compatibility
         } = options;
 
         const ctx = getAudioContext();
@@ -174,7 +231,7 @@ export const AudioProvider = ({ children }) => {
         // Create audio nodes
         const source = ctx.createBufferSource();
         source.buffer = buffer;
-        source.loop = loop; // Set loop property
+        source.loop = loop;
 
         // Store source for stopping later if needed
         if (type === 'monsterBreathing' || type === 'hunt') {
@@ -182,39 +239,53 @@ export const AudioProvider = ({ children }) => {
         }
 
         const gainNode = ctx.createGain();
-        const panner = ctx.createPanner();
 
-        // Configure panner for spatial audio
-        panner.panningModel = 'HRTF';
-        panner.distanceModel = 'linear';
-        panner.refDistance = 1;
+        if (spatial) {
+            const panner = ctx.createPanner();
 
-        // Different max distances for different sound types
-        // Monster sounds (footstep, hunt) have shorter range for more localized fear
-        const maxDistance = (type === 'footstep' || type === 'hunt' || type === 'monsterBreathing') ? 15 : 30;
-        panner.maxDistance = maxDistance;
-        panner.rolloffFactor = 1;
+            // Configure panner for spatial audio
+            panner.panningModel = 'HRTF';
+            panner.distanceModel = 'linear';
+            panner.refDistance = 1;
 
-        // Set positions
-        panner.setPosition(position[0], position[1], position[2]);
-        ctx.listener.setPosition(listenerPosition[0], listenerPosition[1], listenerPosition[2]);
+            // Different max distances for different sound types
+            const maxDistance = (type === 'footstep' || type === 'hunt' || type === 'monsterBreathing') ? 15 : 30;
+            panner.maxDistance = maxDistance;
+            panner.rolloffFactor = 1;
 
-        // Calculate distance-based volume
-        const distance = Math.sqrt(
-            (position[0] - listenerPosition[0]) ** 2 +
-            (position[1] - listenerPosition[1]) ** 2 +
-            (position[2] - listenerPosition[2]) ** 2
-        );
+            // Set positions
+            panner.setPosition(position[0], position[1], position[2]);
 
-        const distanceAttenuation = Math.max(0, 1 - distance / maxDistance);
-        const occlusionFactor = calculateOcclusion(distance);
-        const finalVolume = distanceAttenuation * occlusionFactor * intensity;
+            // IMPORTANT: Only update listener if we have a valid listener position
+            // and we are actually doing spatial audio.
+            // Note: Updating listener here affects ALL spatial sounds. 
+            // Ideally, listener position should be updated in a central loop (e.g. useFrame in App),
+            // but for now, we assume the caller passes the current player position.
+            if (listenerPosition) {
+                ctx.listener.setPosition(listenerPosition[0], listenerPosition[1], listenerPosition[2]);
+            }
 
-        gainNode.gain.value = finalVolume;
+            // Calculate distance-based volume (for initial gain, though Panner handles attenuation too)
+            // We use Panner for attenuation, but we can also modulate gain for extra control
+            const distance = Math.sqrt(
+                (position[0] - listenerPosition[0]) ** 2 +
+                (position[1] - listenerPosition[1]) ** 2 +
+                (position[2] - listenerPosition[2]) ** 2
+            );
 
-        // Connect nodes: source -> panner -> gain -> destination
-        source.connect(panner);
-        panner.connect(gainNode);
+            const occlusionFactor = calculateOcclusion(distance);
+            // Panner handles distance attenuation, so we just apply occlusion and intensity
+            gainNode.gain.value = occlusionFactor * intensity;
+
+            // Connect: source -> panner -> gain -> destination
+            source.connect(panner);
+            panner.connect(gainNode);
+        } else {
+            // Non-spatial (UI sounds, etc.)
+            gainNode.gain.value = intensity;
+            source.connect(gainNode);
+        }
+
         gainNode.connect(ctx.destination);
 
         // Play sound
@@ -223,8 +294,12 @@ export const AudioProvider = ({ children }) => {
         // Cleanup
         source.onended = () => {
             source.disconnect();
-            panner.disconnect();
             gainNode.disconnect();
+            if (spatial) {
+                // panner is only defined in spatial block, but we can't access it here easily 
+                // unless we restructure. 
+                // Actually, let's just let GC handle the panner node since it's disconnected from graph.
+            }
             if (activeSourcesRef.current[type] === source) {
                 activeSourcesRef.current[type] = null;
             }

@@ -5,11 +5,14 @@ import { Vector3 } from 'three';
 import { useNoise } from '../contexts/NoiseContext';
 import { useGame } from '../contexts/GameContext';
 import { useAudio } from '../contexts/AudioContext';
+import { findPath, getRandomWalkableTile } from '../utils/pathfinding';
+import { GAME_CONFIG } from '../constants/GameConstants';
 
 const ENEMY_HEIGHT = 2.5;
 const ENEMY_SIZE = 1;
+const { CELL_SIZE } = GAME_CONFIG;
 
-const Enemy = ({ spawnPosition, playerRef, enemyRef }) => {
+const Enemy = ({ spawnPosition, playerRef, enemyRef, levelData }) => {
     const rigidBodyRef = useRef();
 
     // Sync enemyRef
@@ -24,17 +27,17 @@ const Enemy = ({ spawnPosition, playerRef, enemyRef }) => {
     const [targetPosition, setTargetPosition] = useState(new Vector3(...spawnPosition));
     const [lastNoisePosition, setLastNoisePosition] = useState(new Vector3(...spawnPosition));
     const lastNoiseLevel = useRef(0);
-    const lastFootstepTime = useRef(0);
     const previousState = useRef('patrol');
 
-    // Patrol waypoints (simple back and forth for now)
-    const patrolWaypoints = useRef([
-        new Vector3(spawnPosition[0] + 6, spawnPosition[1], spawnPosition[2]),
-        new Vector3(spawnPosition[0] - 6, spawnPosition[1], spawnPosition[2]),
-        new Vector3(spawnPosition[0], spawnPosition[1], spawnPosition[2] + 6),
-        new Vector3(spawnPosition[0], spawnPosition[1], spawnPosition[2] - 6),
-    ]);
-    const currentWaypointIndex = useRef(0);
+    // Pathfinding state
+    const [path, setPath] = useState([]);
+    const [currentPathIndex, setCurrentPathIndex] = useState(0);
+    const lastPathCalculationTime = useRef(0);
+    const lastTargetPosForPath = useRef(new Vector3());
+
+    // Stuck detection state
+    const lastPosition = useRef(new Vector3(...spawnPosition));
+    const lastPositionCheckTime = useRef(0);
 
     // Update AI state based on noise
     useEffect(() => {
@@ -70,61 +73,147 @@ const Enemy = ({ spawnPosition, playerRef, enemyRef }) => {
         }
     }, [noiseLevel, gameState, playerRef]);
 
+    // Pathfinding & Movement Logic
     useFrame(() => {
         if (!rigidBodyRef.current || !playerRef.current || gameState !== 'playing') return;
 
         const enemyPos = rigidBodyRef.current.translation();
         const playerPos = playerRef.current.translation();
+        const currentTime = Date.now() / 1000;
 
-        let targetPos;
-        let speed;
+        // --- Stuck Detection ---
+        if (currentTime - lastPositionCheckTime.current > 1.0) {
+            const distMoved = Math.sqrt(
+                Math.pow(enemyPos.x - lastPosition.current.x, 2) +
+                Math.pow(enemyPos.z - lastPosition.current.z, 2)
+            );
 
-        switch (state) {
-            case 'hunt':
-                // Chase player directly
-                targetPos = new Vector3(playerPos.x, enemyPos.y, playerPos.z);
-                speed = 4; // Fast
-                break;
-
-            case 'stalk':
-                // Move to last known noise location
-                targetPos = new Vector3(lastNoisePosition.x, enemyPos.y, lastNoisePosition.z);
-                speed = 2.5; // Medium
-                break;
-
-            case 'patrol':
-            default:
-                // Patrol waypoints
-                const waypoint = patrolWaypoints.current[currentWaypointIndex.current];
-                targetPos = new Vector3(waypoint.x, enemyPos.y, waypoint.z);
-                speed = 1.5; // Slow
-
-                // Check if reached waypoint
-                const distToWaypoint = Math.sqrt(
-                    Math.pow(enemyPos.x - waypoint.x, 2) +
-                    Math.pow(enemyPos.z - waypoint.z, 2)
-                );
-                if (distToWaypoint < 2) {
-                    currentWaypointIndex.current =
-                        (currentWaypointIndex.current + 1) % patrolWaypoints.current.length;
+            if (distMoved < 0.1) {
+                // Increment stuck timer
+                if (!rigidBodyRef.current.stuckStartTime) {
+                    rigidBodyRef.current.stuckStartTime = currentTime;
                 }
-                break;
+
+                const stuckDuration = currentTime - rigidBodyRef.current.stuckStartTime;
+
+                if (stuckDuration > 5.0) {
+                    console.warn('[Enemy] Stuck detected for > 5s! Generating report and repathing...');
+
+                    // Generate Report
+                    const report = {
+                        timestamp: new Date().toISOString(),
+                        enemyPos: { x: enemyPos.x, y: enemyPos.y, z: enemyPos.z },
+                        targetPos: { x: targetPosition.x, y: targetPosition.y, z: targetPosition.z },
+                        state: state,
+                        pathLength: path.length,
+                        currentPathIndex: currentPathIndex,
+                        levelId: levelData?.level_id,
+                        stuckDuration: stuckDuration
+                    };
+
+                    // Create and download file
+                    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `enemy_stuck_report_${Date.now()}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+
+                    // Force Repath: Pick a random nearby tile to unstick
+                    const randomTile = getRandomWalkableTile(levelData.layout, levelData.legend, CELL_SIZE);
+                    if (randomTile) {
+                        setTargetPosition(randomTile);
+                        setPath([]); // Clear path to force recalc
+                        rigidBodyRef.current.stuckStartTime = null; // Reset timer
+                    }
+                }
+            } else {
+                // Reset stuck timer if moved
+                rigidBodyRef.current.stuckStartTime = null;
+            }
+
+            lastPosition.current.copy(new Vector3(enemyPos.x, enemyPos.y, enemyPos.z));
+            lastPositionCheckTime.current = currentTime;
         }
 
-        // Calculate direction to target
-        const direction = new Vector3(
-            targetPos.x - enemyPos.x,
-            0,
-            targetPos.z - enemyPos.z
-        );
 
-        const distance = direction.length();
-        if (distance > 0.5) {
-            direction.normalize().multiplyScalar(speed);
-            rigidBodyRef.current.setLinvel({ x: direction.x, y: 0, z: direction.z });
+        // --- Target Selection ---
+        let finalTarget = targetPosition;
+        let speed = 1.5;
+
+        if (state === 'hunt') {
+            finalTarget = new Vector3(playerPos.x, enemyPos.y, playerPos.z);
+            speed = 4;
+        } else if (state === 'stalk') {
+            finalTarget = new Vector3(lastNoisePosition.x, enemyPos.y, lastNoisePosition.z);
+            speed = 2.5;
+        } else if (state === 'patrol') {
+            // If reached target or no target, pick new random one
+            const distToTarget = Math.sqrt(
+                Math.pow(enemyPos.x - targetPosition.x, 2) +
+                Math.pow(enemyPos.z - targetPosition.z, 2)
+            );
+
+            if (distToTarget < 1.0 || path.length === 0) {
+                const randomTile = getRandomWalkableTile(levelData.layout, levelData.legend, CELL_SIZE);
+                if (randomTile) {
+                    setTargetPosition(randomTile);
+                    finalTarget = randomTile;
+                }
+            }
+        }
+
+        // --- Path Calculation ---
+        // Recalculate if:
+        // 1. Path is empty
+        // 2. Target has moved significantly (in hunt/stalk)
+        // 3. Enough time has passed (to avoid spamming A*)
+        const distToLastTarget = finalTarget.distanceTo(lastTargetPosForPath.current);
+        const timeSinceLastCalc = currentTime - lastPathCalculationTime.current;
+
+        if (path.length === 0 || (distToLastTarget > 2.0 && timeSinceLastCalc > 0.5)) {
+            const newPath = findPath(
+                new Vector3(enemyPos.x, enemyPos.y, enemyPos.z),
+                finalTarget,
+                levelData.layout,
+                levelData.legend,
+                CELL_SIZE
+            );
+
+            if (newPath.length > 0) {
+                setPath(newPath);
+                setCurrentPathIndex(0);
+                lastTargetPosForPath.current.copy(finalTarget);
+                lastPathCalculationTime.current = currentTime;
+            }
+        }
+
+        // --- Movement Execution ---
+        if (path.length > 0 && currentPathIndex < path.length) {
+            const nextWaypoint = path[currentPathIndex];
+
+            // Move towards waypoint
+            const direction = new Vector3(
+                nextWaypoint.x - enemyPos.x,
+                0,
+                nextWaypoint.z - enemyPos.z
+            );
+
+            const distToWaypoint = direction.length();
+
+            if (distToWaypoint < 0.5) {
+                // Reached waypoint, move to next
+                setCurrentPathIndex(prev => Math.min(prev + 1, path.length - 1));
+            } else {
+                direction.normalize().multiplyScalar(speed);
+                rigidBodyRef.current.setLinvel({ x: direction.x, y: 0, z: direction.z });
+            }
         } else {
+            // No path or reached end
             rigidBodyRef.current.setLinvel({ x: 0, y: 0, z: 0 });
         }
+
 
         // Check collision with player (death condition)
         const distToPlayer = Math.sqrt(
@@ -154,8 +243,6 @@ const Enemy = ({ spawnPosition, playerRef, enemyRef }) => {
         }
 
         // Play breathing sound periodically in ALL modes (Patrol, Stalk, Hunt)
-        // Use a longer interval for breathing (e.g. 4 seconds)
-        const currentTime = Date.now() / 1000; // Convert to seconds
         if (currentTime - (rigidBodyRef.current.lastBreathingTime || 0) > 4.0) {
             // Intensity varies by state
             let breathIntensity = 0.5; // Default/Patrol
