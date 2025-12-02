@@ -28,6 +28,11 @@ const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
     const { emitPulse } = useScanner();
     const { playSound } = useAudio();
 
+    // Stamina System
+    const [stamina, setStamina] = useState(100);
+    const [isPanting, setIsPanting] = useState(false);
+    const pantingTimer = useRef(0);
+
     // Expose rigidBodyRef to parent
     React.useEffect(() => {
         console.log(`[Player] Initializing with startPosition:`, startPosition);
@@ -134,7 +139,7 @@ const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
         };
     }, []);
 
-    useFrame(() => {
+    useFrame((state, delta) => {
         if (!rigidBodyRef.current) return;
 
         // Stop movement if game is not playing
@@ -150,9 +155,50 @@ const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
         const backward = moveBackward.current;
         const left = moveLeft.current;
         const right = moveRight.current;
-        const sprint = isSprinting;
+
+        // Stamina Logic
+        let canSprint = stamina > 0;
+        // If exhausted (hit 0), require 20 stamina to sprint again
+        if (stamina <= 0) {
+            // We handle this by checking if we are currently panting
+            // If panting, we can't sprint until panting stops
+        }
+
+        // Actual sprint state depends on input AND stamina
+        const attemptingSprint = isSprinting;
+        const actualSprint = attemptingSprint && canSprint && !isPanting;
+
         const crouch = isCrouching;
-        const jump = false; // Space is used for Clap, so no jump for now
+        const jump = false;
+
+        // Update Stamina
+        if (actualSprint) {
+            setStamina(prev => Math.max(0, prev - (20 * delta))); // Drain 20/sec
+            if (stamina <= 0) {
+                setIsPanting(true);
+                pantingTimer.current = 3.0; // Pant for 3 seconds
+            }
+        } else {
+            // Recover
+            setStamina(prev => Math.min(100, prev + (10 * delta))); // Recover 10/sec
+
+            // Handle Panting Timer
+            if (isPanting) {
+                pantingTimer.current -= delta;
+                if (pantingTimer.current <= 0 && stamina > 20) {
+                    setIsPanting(false);
+                }
+            }
+        }
+
+        // Expose Panting State to Enemy via userData
+        if (rigidBodyRef.current) {
+            rigidBodyRef.current.userData = {
+                ...rigidBodyRef.current.userData,
+                isPanting: isPanting,
+                isCrouching: isCrouching
+            };
+        }
 
         // Determine current speed and noise
         let currentSpeed = WALK_SPEED;
@@ -161,7 +207,7 @@ const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
         if (crouch) {
             currentSpeed = CROUCH_SPEED;
             noiseRate = CROUCH_NOISE;
-        } else if (sprint) {
+        } else if (actualSprint) {
             currentSpeed = SPRINT_SPEED;
             noiseRate = SPRINT_NOISE;
         }
@@ -189,39 +235,56 @@ const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
         const cameraHeight = crouch ? 0.75 : PLAYER_HEIGHT;
         camera.position.set(pos.x, pos.y + cameraHeight, pos.z);
 
-        // Footstep sounds
-        const currentTime = Date.now() / 1000;
+        // Footstep sounds - different for each movement type
+        const currentTime = performance.now() / 1000;
+        let footstepInterval;
+        let footstepVolume;
 
-        // Adjust intervals for the new audio file
-        let footstepInterval = 0.6; // Default walk
-        let footstepIntensity = 0.5; // Default walk
-
-        if (sprint) {
-            footstepInterval = 0.35;
-            footstepIntensity = 0.8;
-        } else if (crouch) {
-            footstepInterval = 0.8; // Slower for crouch
-            footstepIntensity = 0.2; // Very quiet
+        if (crouch) {
+            footstepInterval = 0.8;  // Slower for crouch
+            footstepVolume = 0.15;   // Quieter for crouch
+        } else if (actualSprint) {
+            footstepInterval = 0.3;  // Faster for sprint
+            footstepVolume = 0.4;    // Louder for sprint
+        } else {
+            footstepInterval = 0.5;  // Normal walk
+            footstepVolume = 0.25;   // Normal volume
         }
 
         if (isMoving && currentTime - lastFootstepTime.current > footstepInterval) {
             playSound('playerWalk', {
                 position: [pos.x, pos.y, pos.z],
                 listenerPosition: [pos.x, pos.y, pos.z],
-                intensity: footstepIntensity
+                intensity: footstepVolume
             });
             lastFootstepTime.current = currentTime;
+        }
 
-            // Generate noise based on movement
-            const noiseAmount = sprint ? 20 : (crouch ? 2 : 5);
-            addNoise(noiseAmount);
+        // Noise generation based on movement
+        if (isMoving) {
+            let noiseRate = 0;
+
+            if (crouch) {
+                // Crouching is SILENT - no noise generation
+                noiseRate = 0;
+            } else if (actualSprint) {
+                // Sprinting is VERY LOUD
+                noiseRate = 15; // per second
+            } else {
+                // Normal walking
+                noiseRate = 2; // per second
+            }
+
+            setMovementNoise(noiseRate, isMoving);
+        } else {
+            setMovementNoise(0, false);
         }
 
         // Update debug UI
         const debugEl = document.getElementById('debug-ui');
         if (debugEl) {
-            const state = crouch ? '(Crouch)' : sprint ? '(Sprint)' : '';
-            debugEl.innerText = `Pos: ${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)} ${state}`;
+            const state = crouch ? '(Crouch)' : actualSprint ? '(Sprint)' : isPanting ? '(Panting)' : '';
+            debugEl.innerText = `Pos: ${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)} ${state} Stamina: ${Math.floor(stamina)}%`;
         }
     });
 

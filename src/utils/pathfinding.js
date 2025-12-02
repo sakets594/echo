@@ -105,7 +105,7 @@ export const findPath = (start, end, layout, legend, cellSize = 2) => {
 /**
  * Get a random walkable tile from the layout
  */
-export const getRandomWalkableTile = (layout, legend, cellSize = 2) => {
+export const getRandomWalkableTile = (layout, legend, cellSize = 2, rng = null) => {
     const walkableTiles = [];
     layout.forEach((row, z) => {
         row.split('').forEach((char, x) => {
@@ -117,7 +117,26 @@ export const getRandomWalkableTile = (layout, legend, cellSize = 2) => {
 
     if (walkableTiles.length === 0) return null;
 
-    const randomTile = walkableTiles[Math.floor(Math.random() * walkableTiles.length)];
+    // Use seeded RNG if provided, otherwise use Math.random
+    let randomIndex;
+    if (rng) {
+        randomIndex = rng.nextInt(0, walkableTiles.length);
+        // Bounds check for safety
+        if (randomIndex < 0 || randomIndex >= walkableTiles.length) {
+            console.error(`[Pathfinding] Invalid random index: ${randomIndex} (array length: ${walkableTiles.length})`);
+            randomIndex = Math.floor(Math.random() * walkableTiles.length);
+        }
+    } else {
+        randomIndex = Math.floor(Math.random() * walkableTiles.length);
+    }
+
+    const randomTile = walkableTiles[randomIndex];
+
+    if (!randomTile) {
+        console.error(`[Pathfinding] randomTile is undefined! Index: ${randomIndex}, Array length: ${walkableTiles.length}`);
+        return null;
+    }
+
     return gridToWorld(randomTile, cellSize);
 };
 
@@ -131,7 +150,11 @@ const worldToGrid = (pos, cellSize) => {
 };
 
 const gridToWorld = (gridPos, cellSize) => {
-    return new Vector3(gridPos.x * cellSize, 1, gridPos.z * cellSize);
+    return new Vector3(
+        (gridPos.x * cellSize) + (cellSize / 2),
+        1,
+        (gridPos.z * cellSize) + (cellSize / 2)
+    );
 };
 
 const isValid = (gridPos, layout) => {

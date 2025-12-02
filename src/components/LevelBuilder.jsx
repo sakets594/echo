@@ -183,7 +183,10 @@ const LevelBuilder = ({ levelData, playerRef, enemyRef, lidarParams }) => {
               key={`exit-${x}-${z}`}
               type="fixed"
               sensor
-              onIntersectionEnter={() => winGame()}
+              onIntersectionEnter={() => {
+                playSound('victory');
+                winGame();
+              }}
             >
               <Box
                 position={[position[0], 1, position[2]]}

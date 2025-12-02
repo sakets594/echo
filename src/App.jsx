@@ -229,11 +229,24 @@ function GameContent({ currentLevel, setCurrentLevel, allLevels }) {
       </Canvas>
       <div id="debug-ui" style={{
         position: 'absolute',
-        top: '10px',
+        bottom: '40px',
         left: '10px',
         color: 'white',
         fontFamily: 'monospace',
-        pointerEvents: 'none'
+        pointerEvents: 'none',
+        fontSize: '14px',
+        textShadow: '1px 1px 2px black'
+      }}></div>
+      <div id="enemy-debug-ui" style={{
+        position: 'absolute',
+        bottom: '60px',
+        left: '10px',
+        color: '#ff4444',
+        fontFamily: 'monospace',
+        pointerEvents: 'none',
+        fontWeight: 'bold',
+        fontSize: '14px',
+        textShadow: '1px 1px 2px black'
       }}></div>
       <div style={{
         position: 'absolute',

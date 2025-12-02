@@ -43,15 +43,16 @@ export const GameProvider = ({ children }) => {
     }, []);
 
     const winGame = useCallback(() => {
+        console.log('Game Won!');
         setGameState('won');
         setCanRestart(true);
-        console.log('You won!');
     }, []);
 
     const loseGame = useCallback(() => {
+        console.log('Game Lost!');
+        // Note: defeat sound plays from Enemy.jsx on attack
         setGameState('lost');
         setCanRestart(true);
-        console.log('You died!');
     }, []);
 
     const restartGame = useCallback(() => {

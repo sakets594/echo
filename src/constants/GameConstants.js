@@ -38,3 +38,22 @@ export const COLORS = {
     DEBRIS: "#654321",
     CEILING: "#111111"
 };
+
+export const DEFAULT_AI_CONFIG = {
+    // Movement speeds
+    huntSpeed: 5.0,           // Chase speed
+    investigateSpeed: 3.0,    // Investigation speed
+    patrolSpeed: 2.0,         // Patrol speed
+
+    // Sensory ranges
+    tremorRadiusWalk: 10.0,   // Walking detection radius
+    tremorRadiusSprint: 20.0, // Sprinting detection radius
+    breathRadius: 2.0,        // Breath/proximity detection
+    lidarRange: 30.0,         // Lidar pulse detection range (large, omnidirectional)
+    clapSoundRadius: 20.0,    // Clap sound detection range
+
+    // Timers
+    searchDuration: 10.0,     // How long to search after losing player
+    frustrationTime: 15.0,    // Anti-kiting timer
+    inertiaTime: 3.0,         // Minimum chase duration
+};
