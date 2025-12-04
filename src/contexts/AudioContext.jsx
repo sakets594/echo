@@ -27,14 +27,15 @@ export const AudioProvider = ({ children }) => {
         const loadSounds = async () => {
             try {
                 const ctx = getAudioContext();
+                const basePath = import.meta.env.BASE_URL;
                 const sounds = {
-                    'monsterBreathing': '/sounds/monster_breathing.mp3',
-                    'playerWalk': '/sounds/player_walk.mp3',
-                    'gameOver': '/sounds/game_over.mp3',
-                    'heartbeat': '/sounds/heartbeat.wav',
-                    'keyPickup': '/sounds/key_pickup.mp3',
-                    'doorUnlock': '/sounds/door_unlock.mp3',
-                    'exitReached': '/sounds/exit_reached.mp3'
+                    'monsterBreathing': `${basePath}sounds/monster_breathing.mp3`,
+                    'playerWalk': `${basePath}sounds/player_walk.mp3`,
+                    'gameOver': `${basePath}sounds/game_over.mp3`,
+                    'heartbeat': `${basePath}sounds/heartbeat.wav`,
+                    'keyPickup': `${basePath}sounds/key_pickup.mp3`,
+                    'doorUnlock': `${basePath}sounds/door_unlock.mp3`,
+                    'exitReached': `${basePath}sounds/exit_reached.mp3`
                 };
 
                 for (const [key, url] of Object.entries(sounds)) {
