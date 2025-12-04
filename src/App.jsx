@@ -14,7 +14,7 @@ import LevelSelector from './components/LevelSelector';
 
 import { useScanner } from './contexts/ScannerContext';
 import { useNoise } from './contexts/NoiseContext';
-import { useControls } from 'leva';
+import { useControls, Leva } from 'leva';
 
 import { LIDAR_DEFAULTS } from './constants/LidarConstants';
 
@@ -87,6 +87,8 @@ function GameScene({ levelData, onLevelComplete }) {
         castShadow
         shadow-mapSize={[1024, 1024]}
         shadow-bias={-0.001}
+        shadow-camera-near={0.1}
+        shadow-camera-far={lidarParams.maxDistance}
       />
 
       {/* Ambient light for base visibility (very low) */}
@@ -98,6 +100,66 @@ function GameScene({ levelData, onLevelComplete }) {
       <Minimap levelData={levelData} playerRef={playerRef} enemyRef={enemyRef} />
       <HeartbeatSystem playerRef={playerRef} enemyRef={enemyRef} />
     </>
+  );
+}
+
+function DebugPanel() {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  return (
+    <div style={{
+      position: 'absolute',
+      bottom: '10px',
+      left: '10px',
+      zIndex: 2000,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'flex-start',
+      pointerEvents: 'none'
+    }}>
+      <button
+        onClick={() => setIsCollapsed(!isCollapsed)}
+        style={{
+          pointerEvents: 'auto',
+          background: 'rgba(0,0,0,0.5)',
+          color: 'white',
+          border: '1px solid #444',
+          borderRadius: '4px',
+          padding: '2px 6px',
+          fontSize: '12px',
+          cursor: 'pointer',
+          marginBottom: '5px',
+          fontFamily: 'monospace'
+        }}
+      >
+        {isCollapsed ? 'Show Debug' : 'Hide Debug'}
+      </button>
+
+      <div style={{
+        display: isCollapsed ? 'none' : 'block',
+        background: 'rgba(0, 0, 0, 0.3)',
+        padding: '5px',
+        borderRadius: '4px',
+        pointerEvents: 'none'
+      }}>
+        <div id="enemy-debug-ui" style={{
+          color: '#ff4444',
+          fontFamily: 'monospace',
+          fontWeight: 'bold',
+          fontSize: '14px',
+          textShadow: '1px 1px 2px black',
+          marginBottom: '5px',
+          whiteSpace: 'pre-wrap'
+        }}></div>
+        <div id="debug-ui" style={{
+          color: 'white',
+          fontFamily: 'monospace',
+          fontSize: '14px',
+          textShadow: '1px 1px 2px black',
+          whiteSpace: 'pre-wrap'
+        }}></div>
+      </div>
+    </div>
   );
 }
 
@@ -151,6 +213,20 @@ function GameContent({ currentLevel, setCurrentLevel, allLevels }) {
   const handleLevelComplete = useCallback(() => {
     console.log("Level Complete! Transitioning...");
     setGameState('level_transition');
+
+    // Skip auto-progression for test levels
+    const isTestLevel = currentLevel.level_id.startsWith('test_');
+
+    if (isTestLevel) {
+      console.log("Test level - skipping auto-progression");
+      setTimeout(() => {
+        // Just reset the current level instead of progressing
+        resetGameState();
+        resetNoise();
+      }, 3000);
+      return;
+    }
+
     saveProgress(currentLevel.level_id);
 
     setTimeout(() => {
@@ -227,27 +303,8 @@ function GameContent({ currentLevel, setCurrentLevel, allLevels }) {
           <Stats />
         </Suspense>
       </Canvas>
-      <div id="debug-ui" style={{
-        position: 'absolute',
-        bottom: '40px',
-        left: '10px',
-        color: 'white',
-        fontFamily: 'monospace',
-        pointerEvents: 'none',
-        fontSize: '14px',
-        textShadow: '1px 1px 2px black'
-      }}></div>
-      <div id="enemy-debug-ui" style={{
-        position: 'absolute',
-        bottom: '60px',
-        left: '10px',
-        color: '#ff4444',
-        fontFamily: 'monospace',
-        pointerEvents: 'none',
-        fontWeight: 'bold',
-        fontSize: '14px',
-        textShadow: '1px 1px 2px black'
-      }}></div>
+      <DebugPanel />
+      <Leva collapsed />
       <div style={{
         position: 'absolute',
         bottom: '10px',

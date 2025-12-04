@@ -214,10 +214,10 @@ const LevelBuilder = ({ levelData, playerRef, enemyRef, lidarParams }) => {
   }, [layout, legend, collectKey, hasKey, winGame]);
 
   return (
-    <group>
+    <>
       {components}
       {entitySpawnPos && <Enemy spawnPosition={entitySpawnPos} playerRef={playerRef} enemyRef={enemyRef} levelData={levelData} />}
-    </group>
+    </>
   );
 };
 

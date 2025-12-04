@@ -82,7 +82,11 @@ export const findPath = (start, end, layout, legend, cellSize = 2) => {
             }
 
             const currentG = gScore.get(currentKey);
-            const tentativeGScore = (currentG !== undefined ? currentG : Infinity) + getDistance(current, neighbor);
+            // Calculate cost based on movement type (diagonal vs straight)
+            const isDiagonal = neighbor.x !== current.x && neighbor.z !== current.z;
+            const moveCost = isDiagonal ? DIAGONAL_COST : STRAIGHT_COST;
+
+            const tentativeGScore = (currentG !== undefined ? currentG : Infinity) + moveCost;
 
 
             if (tentativeGScore < (gScore.get(neighborKey) ?? Infinity)) {
@@ -106,14 +110,45 @@ export const findPath = (start, end, layout, legend, cellSize = 2) => {
  * Get a random walkable tile from the layout
  */
 export const getRandomWalkableTile = (layout, legend, cellSize = 2, rng = null) => {
+    return getRandomWalkableTileInRadius(layout, legend, cellSize, null, Infinity, rng);
+};
+
+/**
+ * Get a random walkable tile within a radius of a center point
+ */
+export const getRandomWalkableTileInRadius = (layout, legend, cellSize = 2, center = null, radius = Infinity, rng = null) => {
     const walkableTiles = [];
-    layout.forEach((row, z) => {
-        row.split('').forEach((char, x) => {
+
+    // Optimization: If radius is small, only check relevant grid area
+    let minX = 0, maxX = layout[0].length - 1;
+    let minZ = 0, maxZ = layout.length - 1;
+
+    if (center && radius !== Infinity) {
+        const centerGrid = worldToGrid(center, cellSize);
+        const radiusGrid = Math.ceil(radius / cellSize);
+        minX = Math.max(0, centerGrid.x - radiusGrid);
+        maxX = Math.min(layout[0].length - 1, centerGrid.x + radiusGrid);
+        minZ = Math.max(0, centerGrid.z - radiusGrid);
+        maxZ = Math.min(layout.length - 1, centerGrid.z + radiusGrid);
+    }
+
+    for (let z = minZ; z <= maxZ; z++) {
+        const row = layout[z];
+        for (let x = minX; x <= maxX; x++) {
+            const char = row[x];
             if (isWalkable({ x, z }, layout, legend)) {
-                walkableTiles.push({ x, z });
+                // Check radius if center is provided
+                if (center && radius !== Infinity) {
+                    const tilePos = gridToWorld({ x, z }, cellSize);
+                    if (tilePos.distanceTo(center) <= radius) {
+                        walkableTiles.push({ x, z });
+                    }
+                } else {
+                    walkableTiles.push({ x, z });
+                }
             }
-        });
-    });
+        }
+    }
 
     if (walkableTiles.length === 0) return null;
 
@@ -144,8 +179,8 @@ export const getRandomWalkableTile = (layout, legend, cellSize = 2, rng = null) 
 
 const worldToGrid = (pos, cellSize) => {
     return {
-        x: Math.round(pos.x / cellSize),
-        z: Math.round(pos.z / cellSize)
+        x: Math.floor(pos.x / cellSize),
+        z: Math.floor(pos.z / cellSize)
     };
 };
 
@@ -178,21 +213,41 @@ const getNeighbors = (gridPos, layout, legend) => {
         { x: 0, z: -1 }, // Up
         { x: 0, z: 1 },  // Down
         { x: -1, z: 0 }, // Left
-        { x: 1, z: 0 }   // Right
+        { x: 1, z: 0 },   // Right
+        // Diagonals
+        { x: -1, z: -1 }, // Up-Left
+        { x: 1, z: -1 },  // Up-Right
+        { x: -1, z: 1 },  // Down-Left
+        { x: 1, z: 1 }    // Down-Right
     ];
 
     for (const dir of dirs) {
         const neighbor = { x: gridPos.x + dir.x, z: gridPos.z + dir.z };
+
+        // Basic walkability check
         if (isWalkable(neighbor, layout, legend)) {
-            neighbors.push(neighbor);
+            // Diagonal check: prevent corner cutting
+            if (dir.x !== 0 && dir.z !== 0) {
+                // Check adjacent cardinals
+                const card1 = { x: gridPos.x + dir.x, z: gridPos.z };
+                const card2 = { x: gridPos.x, z: gridPos.z + dir.z };
+
+                if (isWalkable(card1, layout, legend) && isWalkable(card2, layout, legend)) {
+                    neighbors.push(neighbor);
+                }
+            } else {
+                neighbors.push(neighbor);
+            }
         }
     }
     return neighbors;
 };
 
 const getDistance = (a, b) => {
-    // Manhattan distance for heuristic
-    return Math.abs(a.x - b.x) + Math.abs(a.z - b.z);
+    // Octile distance for 8-direction movement
+    const dx = Math.abs(a.x - b.x);
+    const dz = Math.abs(a.z - b.z);
+    return (dx + dz) + (DIAGONAL_COST - 2 * STRAIGHT_COST) * Math.min(dx, dz);
 };
 
 const reconstructPath = (cameFrom, current, cellSize) => {
