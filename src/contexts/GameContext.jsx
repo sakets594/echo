@@ -105,6 +105,7 @@ export const GameProvider = ({ children }) => {
         loseGame,
         restartGame,
         toggleDebugLights,
+        setDebugLights, // Expose direct setter for safety
         resetGameState,
         saveProgress,
         loadProgress

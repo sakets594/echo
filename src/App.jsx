@@ -23,6 +23,13 @@ import { GAME_CONFIG } from './constants/GameConstants';
 // Load all levels dynamically
 const levelModules = import.meta.glob('./levels/*.json', { eager: true });
 const allLevels = Object.values(levelModules).map(m => m.default || m).sort((a, b) => {
+  // Check if levels are test levels
+  const isTestA = a.level_id.startsWith('test_');
+  const isTestB = b.level_id.startsWith('test_');
+
+  if (isTestA && !isTestB) return 1; // Put test levels last
+  if (!isTestA && isTestB) return -1;
+
   // Sort by level ID number if possible
   const numA = parseInt(a.level_id.match(/\d+/)?.[0] || 0);
   const numB = parseInt(b.level_id.match(/\d+/)?.[0] || 0);
@@ -190,15 +197,20 @@ import StartScreen from './components/StartScreen';
 import PauseScreen from './components/PauseScreen';
 import HeartbeatSystem from './components/HeartbeatSystem';
 
+import AITestArena from './components/debug/AITestArena';
+
 function GameContent({ currentLevel, setCurrentLevel, allLevels }) {
   const { gameState, setGameState, resetGameState, saveProgress, loadProgress, startGame, pauseGame, resumeGame } = useGame();
   const { resetNoise } = useNoise();
+  const [testMode, setTestMode] = useState(false);
 
   // Handle Esc key for pausing
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.code === 'Escape') {
-        if (gameState === 'playing') {
+        if (testMode) {
+          setTestMode(false); // Exit test mode on Esc
+        } else if (gameState === 'playing') {
           pauseGame();
         } else if (gameState === 'paused') {
           resumeGame();
@@ -208,7 +220,7 @@ function GameContent({ currentLevel, setCurrentLevel, allLevels }) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [gameState, pauseGame, resumeGame]);
+  }, [gameState, pauseGame, resumeGame, testMode]);
 
   const handleLevelComplete = useCallback(() => {
     console.log("Level Complete! Transitioning...");
@@ -281,12 +293,17 @@ function GameContent({ currentLevel, setCurrentLevel, allLevels }) {
     return saved > 1;
   }, [loadProgress]);
 
+  if (testMode) {
+    return <AITestArena />;
+  }
+
   return (
     <div style={{ width: '100vw', height: '100vh' }}>
       {gameState === 'start' && (
         <StartScreen
           onContinue={handleContinue}
           hasSavedProgress={hasSavedProgress}
+          onDebug={() => setTestMode(true)}
         />
       )}
       {gameState === 'paused' && (

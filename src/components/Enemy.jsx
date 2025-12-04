@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { RigidBody, CuboidCollider } from '@react-three/rapier';
+import { Line } from '@react-three/drei';
 import { Vector3, Raycaster } from 'three';
 import { useNoise } from '../contexts/NoiseContext';
 import { useGame } from '../contexts/GameContext';
@@ -16,7 +17,7 @@ const ENEMY_HEIGHT = 2.5;
 const ENEMY_SIZE = 1;
 const { CELL_SIZE } = GAME_CONFIG;
 
-const Enemy = ({ spawnPosition, playerRef, enemyRef, levelData, aiConfig = {}, seed }) => {
+const Enemy = ({ spawnPosition, playerRef, enemyRef, levelData, aiConfig = {}, seed, targetOverride, stimulusQueue, onAIEvent, onUpdateTarget }) => {
     const rigidBodyRef = useRef();
 
     // Initialize seeded RNG for deterministic patrol behavior
@@ -56,6 +57,7 @@ const Enemy = ({ spawnPosition, playerRef, enemyRef, levelData, aiConfig = {}, s
         frustrationTime: { value: config.frustrationTime, min: 1, max: 20 },
         inertiaTime: { value: config.inertiaTime, min: 0, max: 10 },
         searchDuration: { value: 10, min: 5, max: 30 }, // Added searchDuration control
+        showDebug: false,
     });
 
     // Instantiate AI and Movement classes
@@ -74,30 +76,51 @@ const Enemy = ({ spawnPosition, playerRef, enemyRef, levelData, aiConfig = {}, s
         raycaster.set(start, dir);
         const hits = raycaster.intersectObjects(scene.children, true);
 
+        // Debug: Log first few hits
+        // if (hits.length > 0) {
+        //    console.log('[SightCheck] Hits:', hits.map(h => ({ type: h.object.userData?.type, dist: h.distance, name: h.object.name })));
+        // }
+
         // Return TRUE if NO wall is hit before the target distance
-        return !hits.some(hit => hit.distance < dist && hit.object.userData?.type === 'wall');
+        const blocked = hits.some(hit => {
+            const isWall = hit.object.userData?.type === 'wall';
+            const isCloser = hit.distance < dist;
+            if (isWall && isCloser) {
+                // console.log('[SightCheck] Blocked by wall at', hit.distance);
+                return true;
+            }
+            return false;
+        });
+        return !blocked;
     };
 
     // --- MAIN LOOP ---
     useFrame((stateCtx, delta) => {
-        if (!rigidBodyRef.current || !playerRef.current || gameState !== 'playing') return;
+        if (!rigidBodyRef.current || gameState !== 'playing') return;
 
         const enemyPos = rigidBodyRef.current.translation();
         const enemyVec = new Vector3(enemyPos.x, enemyPos.y, enemyPos.z);
-        const playerPos = playerRef.current.translation();
-        const playerVec = new Vector3(playerPos.x, playerPos.y, playerPos.z);
 
-        // Calculate player state
-        const playerSpeed = new Vector3(playerRef.current.linvel().x, 0, playerRef.current.linvel().z).length();
-        const isPanting = playerRef.current.userData?.isPanting || false;
-        const isCrouching = playerRef.current.userData?.isCrouching || false;
-        const isSprinting = playerSpeed > 6.0;
-        const isWalking = playerSpeed > 0.1 && !isSprinting && !isCrouching;
+        let playerPos = null;
+        let playerVec = null;
+        let playerState = { isWalking: false, isSprinting: false, isPanting: false, effectiveBreathRadius: aiParams.breathRadius };
 
-        let effectiveBreathRadius = aiParams.breathRadius;
-        if (isPanting) effectiveBreathRadius *= 3.0;
+        if (playerRef && playerRef.current) {
+            playerPos = playerRef.current.translation();
+            playerVec = new Vector3(playerPos.x, playerPos.y, playerPos.z);
 
-        const playerState = { isWalking, isSprinting, isPanting, effectiveBreathRadius };
+            // Calculate player state
+            const playerSpeed = new Vector3(playerRef.current.linvel().x, 0, playerRef.current.linvel().z).length();
+            const isPanting = playerRef.current.userData?.isPanting || false;
+            const isCrouching = playerRef.current.userData?.isCrouching || false;
+            const isSprinting = playerSpeed > 6.0;
+            const isWalking = playerSpeed > 0.1 && !isSprinting && !isCrouching;
+
+            let effectiveBreathRadius = aiParams.breathRadius;
+            if (isPanting) effectiveBreathRadius *= 3.0;
+
+            playerState = { isWalking, isSprinting, isPanting, effectiveBreathRadius };
+        }
 
         // Check Lidar Stimulus
         let stimulus = null;
@@ -116,12 +139,52 @@ const Enemy = ({ spawnPosition, playerRef, enemyRef, levelData, aiConfig = {}, s
         }
 
         // Check Tremor Stimulus
-        const distToPlayer = enemyVec.distanceTo(playerVec);
-        if (isWalking && distToPlayer < aiParams.tremorRadiusWalk) {
-            stimulus = { type: 'TREMOR_FAINT', pos: playerVec };
+        if (playerVec) {
+            const distToPlayer = enemyVec.distanceTo(playerVec);
+            if (playerState.isWalking && distToPlayer < aiParams.tremorRadiusWalk) {
+                stimulus = { type: 'TREMOR_FAINT', pos: playerVec };
+            }
+            if (playerState.isSprinting && distToPlayer < aiParams.tremorRadiusSprint) {
+                stimulus = { type: 'TREMOR_LOUD', pos: playerVec };
+            }
         }
-        if (isSprinting && distToPlayer < aiParams.tremorRadiusSprint) {
-            stimulus = { type: 'TREMOR_LOUD', pos: playerVec };
+
+        // Inject external stimulus (Test Mode)
+        if (stimulusQueue && stimulusQueue.length > 0) {
+            // Consume one stimulus
+            const externalStimulus = stimulusQueue.shift();
+            if (externalStimulus) {
+                let isValid = false;
+                const stimPos = new Vector3(externalStimulus.pos.x, externalStimulus.pos.y, externalStimulus.pos.z);
+                const dist = enemyVec.distanceTo(stimPos);
+
+                if (externalStimulus.type === 'LIDAR') {
+                    // Check Lidar Range and Occlusion
+                    if (dist < aiParams.lidarRange) {
+                        if (sightCheck(enemyVec, stimPos)) {
+                            isValid = true;
+                        } else {
+                            console.log('[Enemy] External Lidar blocked by wall.');
+                        }
+                    } else {
+                        console.log('[Enemy] External Lidar out of range.');
+                    }
+                } else if (externalStimulus.type === 'TREMOR_LOUD' || externalStimulus.type === 'TREMOR_FAINT') {
+                    // Check Sound Range (using tremor radius as proxy for now)
+                    // TREMOR_LOUD = Sprint (larger radius), TREMOR_FAINT = Walk
+                    const range = externalStimulus.type === 'TREMOR_LOUD' ? aiParams.tremorRadiusSprint : aiParams.tremorRadiusWalk;
+                    if (dist < range) {
+                        isValid = true;
+                    } else {
+                        console.log('[Enemy] External Sound out of range.');
+                    }
+                }
+
+                if (isValid) {
+                    stimulus = externalStimulus;
+                    console.log('[Enemy] External Stimulus Accepted:', stimulus);
+                }
+            }
         }
 
         // Update AI State
@@ -130,14 +193,26 @@ const Enemy = ({ spawnPosition, playerRef, enemyRef, levelData, aiConfig = {}, s
             playerPos: playerVec,
             playerState,
             stimulus,
-            sightCheck
+            sightCheck,
+            targetOverride
         });
+
+        // Notify parent of target change (Test Mode)
+        if (onUpdateTarget && aiResult.targetPosition) {
+            onUpdateTarget(aiResult.targetPosition);
+        } else if (onUpdateTarget && !aiResult.targetPosition) {
+            onUpdateTarget(null);
+        }
 
         // Handle Events
         if (aiResult.events && aiResult.events.length > 0) {
             aiResult.events.forEach(event => {
                 if (event === 'playSound:hunt') {
                     playSound('hunt', { position: [enemyPos.x, enemyPos.y, enemyPos.z], intensity: 1.0 });
+                }
+                // Propagate events to callback (Test Mode)
+                if (onAIEvent) {
+                    onAIEvent(event);
                 }
             });
         }
@@ -173,15 +248,27 @@ const Enemy = ({ spawnPosition, playerRef, enemyRef, levelData, aiConfig = {}, s
         );
 
         // Handle Unreachable/Reached Target (Patrol, Search, Investigate)
-        if ((moveResult.pathStatus === 'unreachable' || moveResult.pathStatus === 'complete' || moveResult.reachedTarget)) {
-            if (currentState === 'patrol' || currentState === 'search' || currentState === 'investigate') {
-                console.log(`[Enemy] Target ${moveResult.pathStatus} in ${currentState}, picking new target.`);
-                ai.targetPosition = null;
+        if ((moveResult.pathStatus === 'unreachable' || moveResult.pathStatus === 'complete' || moveResult.pathStatus === 'stuck' || moveResult.reachedTarget)) {
 
-                // For Search/Investigate, we might want to explicitly trigger a new random point immediately
-                // The AI loop (EnemyAI.js) doesn't automatically pick a new point for Search unless we tell it to?
-                // Actually, in Enemy.jsx line 152, we only check `if (!aiResult.targetPosition && aiResult.state === 'patrol')`.
-                // We need to add 'search' and 'investigate' there too if we want random movement.
+            // Log for debugging
+            if (moveResult.pathStatus === 'stuck' || moveResult.pathStatus === 'unreachable') {
+                console.log(`[Enemy] Path Status: ${moveResult.pathStatus}. Clearing target.`);
+            }
+
+            if (currentState === 'patrol' || currentState === 'search' || currentState === 'investigate' || currentState === 'chase') {
+                // Force AI to pick a new target
+                ai.targetPosition = null;
+            }
+
+            // Notify Test Arena of path completion or failure
+            if (onAIEvent) {
+                if (moveResult.pathStatus === 'complete') {
+                    onAIEvent('PathComplete');
+                } else if (moveResult.pathStatus === 'stuck') {
+                    onAIEvent('PathStuck');
+                } else if (moveResult.pathStatus === 'unreachable') {
+                    onAIEvent('PathUnreachable');
+                }
             }
         }
 
@@ -189,14 +276,16 @@ const Enemy = ({ spawnPosition, playerRef, enemyRef, levelData, aiConfig = {}, s
         rigidBodyRef.current.setLinvel({ x: moveResult.velocity.x, y: 0, z: moveResult.velocity.z }, true);
 
         // Kill Check
-        const killDist = enemyVec.distanceTo(playerVec);
-        if (killDist < 2.5) {
-            console.log('[Enemy] KILL! Distance:', killDist.toFixed(2));
-            playSound('monsterAttack', { position: [enemyPos.x, enemyPos.y, enemyPos.z], intensity: 1.0 });
-            setTimeout(() => loseGame(), 100);
-            stopSound('hunt');
-            playSound('gameOver', { position: [playerPos.x, playerPos.y, playerPos.z], intensity: 1.0 });
-            loseGame();
+        if (playerVec) {
+            const killDist = enemyVec.distanceTo(playerVec);
+            if (killDist < 2.5) {
+                console.log('[Enemy] KILL! Distance:', killDist.toFixed(2));
+                playSound('monsterAttack', { position: [enemyPos.x, enemyPos.y, enemyPos.z], intensity: 1.0 });
+                setTimeout(() => loseGame(), 100);
+                stopSound('hunt');
+                playSound('gameOver', { position: [playerPos.x, playerPos.y, playerPos.z], intensity: 1.0 });
+                loseGame();
+            }
         }
 
         // Breathing Sound
@@ -230,6 +319,14 @@ const Enemy = ({ spawnPosition, playerRef, enemyRef, levelData, aiConfig = {}, s
 
             debugEl.innerText = `Enemy: ${currentState.toUpperCase()} [${enemyStr}] -> Tgt: [${targetStr}] Dist: ${distStr}m\nPath: ${waypointInfo} | Vel: [${velStr}] (${velMag} m/s)`;
         }
+
+        // Update Visualizers (Test Mode)
+        if (pathLineRef.current) {
+            const points = moveResult.path.map(p => new Vector3(p.x, 1, p.z));
+            // Add current pos as start
+            points.unshift(new Vector3(enemyPos.x, 1, enemyPos.z));
+            pathLineRef.current.setPoints(points);
+        }
     });
 
     // Color based on state
@@ -241,6 +338,9 @@ const Enemy = ({ spawnPosition, playerRef, enemyRef, levelData, aiConfig = {}, s
             default: return '#ffff00';
         }
     };
+
+    // Debug Visuals Refs
+    const pathLineRef = useRef();
 
     return (
         <RigidBody
@@ -256,6 +356,28 @@ const Enemy = ({ spawnPosition, playerRef, enemyRef, levelData, aiConfig = {}, s
                 <boxGeometry args={[ENEMY_SIZE, ENEMY_HEIGHT, ENEMY_SIZE]} />
                 <meshStandardMaterial color={getColor()} emissive={getColor()} emissiveIntensity={0.5} />
             </mesh>
+
+            {/* Debug Visuals */}
+            {aiParams.showDebug && (
+                <>
+                    {/* Path Line */}
+                    <Line ref={pathLineRef} color="red" lineWidth={2} />
+
+                    {/* Sensory Spheres */}
+                    <mesh position={[0, ENEMY_HEIGHT / 2, 0]}>
+                        <sphereGeometry args={[aiParams.tremorRadiusWalk, 16, 16]} />
+                        <meshBasicMaterial color="yellow" wireframe transparent opacity={0.2} />
+                    </mesh>
+                    <mesh position={[0, ENEMY_HEIGHT / 2, 0]}>
+                        <sphereGeometry args={[aiParams.tremorRadiusSprint, 16, 16]} />
+                        <meshBasicMaterial color="orange" wireframe transparent opacity={0.2} />
+                    </mesh>
+                    <mesh position={[0, ENEMY_HEIGHT / 2, 0]}>
+                        <sphereGeometry args={[aiParams.lidarRange, 16, 16]} />
+                        <meshBasicMaterial color="cyan" wireframe transparent opacity={0.1} />
+                    </mesh>
+                </>
+            )}
         </RigidBody>
     );
 };

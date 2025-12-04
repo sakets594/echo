@@ -2,7 +2,7 @@ import React from 'react';
 import { useGame } from '../contexts/GameContext';
 import { UI_TEXT, COLORS } from '../constants/GameConstants';
 
-const StartScreen = ({ onContinue, hasSavedProgress }) => {
+const StartScreen = ({ onContinue, hasSavedProgress, onDebug }) => {
     const { startGame } = useGame();
 
     return (
@@ -62,6 +62,23 @@ const StartScreen = ({ onContinue, hasSavedProgress }) => {
                     </button>
                 )}
             </div>
+
+            {/* Debug Mode Button */}
+            <button
+                onClick={onDebug}
+                style={{
+                    marginBottom: '40px',
+                    padding: '10px 20px',
+                    fontSize: '1rem',
+                    backgroundColor: '#333',
+                    color: '#aaa',
+                    border: '1px solid #555',
+                    cursor: 'pointer',
+                    fontFamily: 'monospace',
+                }}
+            >
+                DEBUG MODE (AI TEST)
+            </button>
 
             <div style={{ display: 'flex', gap: '60px', textAlign: 'left' }}>
                 <div>

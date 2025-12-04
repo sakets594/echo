@@ -44,6 +44,9 @@ const useLidarMaterials = (lidarParams) => {
           console.log(`[LevelBuilder] Pulse Active! Time: ${currentTime.toFixed(2)}, PulseTime: ${lastPulseTime.toFixed(2)}, Origin: ${lastPulseOrigin}`);
         }
 
+        // Debug Lights Check
+        // if (Math.random() < 0.01) console.log('[LevelBuilder] debugLights:', debugLights);
+
         // Update tweakable params
         if (lidarParams) {
           if (material.uniforms.uWaveSpeed) material.uniforms.uWaveSpeed.value = lidarParams.waveSpeed;
@@ -58,10 +61,13 @@ const useLidarMaterials = (lidarParams) => {
   return { getMaterial };
 };
 
-const LevelBuilder = ({ levelData, playerRef, enemyRef, lidarParams }) => {
+const LevelBuilder = ({ levelData, playerRef, enemyRef, lidarParams, hideCeiling = false, highContrast = false, spawnEnemies = true }) => {
   const { layout, legend } = levelData;
   const { collectKey, hasKey, winGame } = useGame();
   const { getMaterial } = useLidarMaterials(lidarParams);
+
+  // Helper for colors
+  const getColor = (defaultColor, contrastColor) => highContrast ? contrastColor : defaultColor;
 
   // Find entity spawn position
   const entitySpawnPos = useMemo(() => {
@@ -84,14 +90,16 @@ const LevelBuilder = ({ levelData, playerRef, enemyRef, lidarParams }) => {
     const levelWidth = maxWidth * CELL_SIZE;
     const levelDepth = layout.length * CELL_SIZE;
 
-    items.push(
-      <Box
-        key="ceiling"
-        args={[levelWidth, 0.2, levelDepth]}
-        position={[levelWidth / 2 - CELL_SIZE / 2, WALL_HEIGHT + 0.1, levelDepth / 2 - CELL_SIZE / 2]}
-        material={getMaterial("#111111")}
-      />
-    );
+    if (!hideCeiling) {
+      items.push(
+        <Box
+          key="ceiling"
+          args={[levelWidth, 0.2, levelDepth]}
+          position={[levelWidth / 2 - CELL_SIZE / 2, WALL_HEIGHT + 0.1, levelDepth / 2 - CELL_SIZE / 2]}
+          material={getMaterial(getColor("#111111", "#444444"))}
+        />
+      );
+    }
 
     layout.forEach((row, z) => {
       row.split('').forEach((char, x) => {
@@ -106,7 +114,7 @@ const LevelBuilder = ({ levelData, playerRef, enemyRef, lidarParams }) => {
           }
           items.push(
             <RigidBody key={`floor-${x}-${z}`} type="fixed" colliders="cuboid" position={[position[0], -2.5, position[2]]}>
-              <Box args={[CELL_SIZE, 5, CELL_SIZE]} material={getMaterial("#222222")} receiveShadow />
+              <Box args={[CELL_SIZE, 5, CELL_SIZE]} material={getMaterial(getColor("#222222", "#2a2a40"))} receiveShadow />
             </RigidBody>
           );
         }
@@ -114,25 +122,29 @@ const LevelBuilder = ({ levelData, playerRef, enemyRef, lidarParams }) => {
         if (type === 'Wall') {
           items.push(
             <RigidBody key={`wall-${x}-${z}`} type="fixed" colliders="cuboid">
-              <Box
+              <mesh
                 position={[position[0], WALL_HEIGHT / 2, position[2]]}
-                args={[CELL_SIZE, WALL_HEIGHT, CELL_SIZE]}
-                material={getMaterial("#888888")}
                 castShadow
                 receiveShadow
-              />
+                userData={{ type: 'wall' }}
+                material={getMaterial(getColor("#888888", "#DDDDDD"))}
+              >
+                <boxGeometry args={[CELL_SIZE, WALL_HEIGHT, CELL_SIZE]} />
+              </mesh>
             </RigidBody>
           );
         } else if (type === 'Pillar') {
           items.push(
             <RigidBody key={`pillar-${x}-${z}`} type="fixed" colliders="cuboid">
-              <Box
+              <mesh
                 position={[position[0], WALL_HEIGHT / 2, position[2]]}
-                args={[CELL_SIZE * 0.5, WALL_HEIGHT, CELL_SIZE * 0.5]}
-                material={getMaterial("#555555")}
                 castShadow
                 receiveShadow
-              />
+                userData={{ type: 'wall' }}
+                material={getMaterial(getColor("#555555", "#AAAAAA"))}
+              >
+                <boxGeometry args={[CELL_SIZE * 0.5, WALL_HEIGHT, CELL_SIZE * 0.5]} />
+              </mesh>
             </RigidBody>
           );
         } else if (type === 'Debris') {
@@ -141,7 +153,7 @@ const LevelBuilder = ({ levelData, playerRef, enemyRef, lidarParams }) => {
               <Box
                 position={[position[0], 0.2, position[2]]}
                 args={[CELL_SIZE, 0.4, CELL_SIZE]}
-                material={getMaterial("#654321")}
+                material={getMaterial(getColor("#654321", "#D2691E"))}
                 castShadow
                 receiveShadow
               />
@@ -184,7 +196,7 @@ const LevelBuilder = ({ levelData, playerRef, enemyRef, lidarParams }) => {
               type="fixed"
               sensor
               onIntersectionEnter={() => {
-                playSound('victory');
+                // playSound('victory'); // Removed to avoid missing dependency if not imported
                 winGame();
               }}
             >
@@ -211,12 +223,12 @@ const LevelBuilder = ({ levelData, playerRef, enemyRef, lidarParams }) => {
       });
     });
     return items;
-  }, [layout, legend, collectKey, hasKey, winGame]);
+  }, [layout, legend, collectKey, hasKey, winGame, hideCeiling, highContrast, getMaterial]);
 
   return (
     <>
       {components}
-      {entitySpawnPos && <Enemy spawnPosition={entitySpawnPos} playerRef={playerRef} enemyRef={enemyRef} levelData={levelData} />}
+      {spawnEnemies && entitySpawnPos && <Enemy key={levelData.level_id} spawnPosition={entitySpawnPos} playerRef={playerRef} enemyRef={enemyRef} levelData={levelData} />}
     </>
   );
 };
