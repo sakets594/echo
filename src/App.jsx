@@ -354,17 +354,33 @@ function GameContent({ currentLevel, setCurrentLevel, allLevels }) {
         />
       )}
       {gameState === 'playing' && <MobileControls />}
+      {/* Heartbeat Vignette */}
       <div id="heartbeat-vignette" style={{
-        position: 'absolute',
+        position: 'fixed',
         top: 0,
         left: 0,
         width: '100%',
         height: '100%',
         pointerEvents: 'none',
-        zIndex: 1000,
         opacity: 0,
-        transition: 'opacity 0.1s ease-out'
-      }}></div>
+        transition: 'opacity 0.1s',
+        zIndex: 900,
+      }} />
+
+      {/* Asset Attributions */}
+      <div style={{
+        position: 'fixed',
+        bottom: '5px',
+        right: '5px',
+        fontSize: '8px',
+        color: 'rgba(255,255,255,0.3)',
+        pointerEvents: 'none',
+        zIndex: 1000,
+        textAlign: 'right',
+        lineHeight: '1.2'
+      }}>
+        <div>3D Models: <a href="https://skfb.ly/ptszw" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>TileItRight</a>, <a href="https://skfb.ly/oLVDS" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>st4ng</a>, <a href="https://skfb.ly/pwwGU" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>Nelamon</a> (CC BY 4.0)</div>
+      </div>
     </div>
   );
 }

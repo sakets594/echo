@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { RigidBody, CuboidCollider } from '@react-three/rapier';
 import { Line, Text, Billboard } from '@react-three/drei';
+import { useGLTF } from '@react-three/drei';
 import { Vector3, Raycaster } from 'three';
 import { useNoise } from '../contexts/NoiseContext';
 import { useGame } from '../contexts/GameContext';
@@ -392,10 +393,8 @@ const Enemy = ({ spawnPosition, playerRef, enemyRef, levelData, aiConfig = {}, s
                         </Text>
                     </Billboard>
 
-                    <mesh position={[0, ENEMY_HEIGHT / 2, 0]}>
-                        <boxGeometry args={[ENEMY_SIZE, ENEMY_HEIGHT, ENEMY_SIZE]} />
-                        <meshStandardMaterial color={getColor()} emissive={getColor()} emissiveIntensity={0.5} />
-                    </mesh>
+                    {/* 3D Model Visual Overlay */}
+                    <EnemyModel position={[0, 0, 0]} />
 
                     {/* Debug Visuals */}
                     {aiParams.showDebug && (
@@ -423,5 +422,20 @@ const Enemy = ({ spawnPosition, playerRef, enemyRef, levelData, aiConfig = {}, s
         </RigidBody>
     );
 };
+
+// Enemy 3D Model Component
+function EnemyModel({ position }) {
+    const { scene } = useGLTF('/models/enemy.glb');
+    return (
+        <primitive
+            object={scene.clone()}
+            position={position}
+            scale={[0.5, 0.5, 0.5]}
+        />
+    );
+}
+
+// Preload the model
+useGLTF.preload('/models/enemy.glb');
 
 export default Enemy;

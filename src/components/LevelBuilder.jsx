@@ -1,8 +1,9 @@
 import React, { useMemo, useRef, useCallback } from 'react';
-import { Box, Text, Billboard } from '@react-three/drei';
-import { RigidBody } from '@react-three/rapier';
+import { Box, Text, Billboard, useGLTF } from '@react-three/drei';
+import { RigidBody, CuboidCollider } from '@react-three/rapier';
 import { useGame } from '../contexts/GameContext';
 import { useScanner } from '../contexts/ScannerContext';
+import { useAudio } from '../contexts/AudioContext';
 import { useFrame } from '@react-three/fiber';
 import Enemy from './Enemy';
 import { LidarMaterial } from '../materials/LidarMaterial';
@@ -64,6 +65,7 @@ const useLidarMaterials = (lidarParams) => {
 const LevelBuilder = ({ levelData, playerRef, enemyRef, lidarParams, hideCeiling = false, highContrast = false, spawnEnemies = true }) => {
   const { layout, legend } = levelData;
   const { collectKey, hasKey, winGame } = useGame();
+  const { playSound } = useAudio();
   const { getMaterial } = useLidarMaterials(lidarParams);
 
   // Helper for colors
@@ -166,14 +168,19 @@ const LevelBuilder = ({ levelData, playerRef, enemyRef, lidarParams, hideCeiling
                 key={`key-${x}-${z}`}
                 type="fixed"
                 sensor
-                onIntersectionEnter={() => collectKey()}
+                onIntersectionEnter={() => {
+                  collectKey();
+                  playSound('keyPickup', { intensity: 0.8, spatial: false });
+                  // Door unlocks when key is collected
+                  setTimeout(() => {
+                    playSound('doorUnlock', { intensity: 0.7, spatial: false });
+                  }, 300); // Small delay for better audio feedback
+                }}
+                position={[position[0], 1, position[2]]}
               >
-                <Box
-                  position={[position[0], 1, position[2]]}
-                  args={[0.5, 0.5, 0.5]}
-                >
-                  <meshBasicMaterial color="#FFD700" />
-                </Box>
+                <CuboidCollider args={[0.25, 0.25, 0.25]} sensor />
+                {/* Visual Key Model */}
+                <KeyModel position={[0, 0, 0]} />
               </RigidBody>
               <Billboard key={`key-label-${x}-${z}`} position={[position[0], 2, position[2]]}>
                 <Text
@@ -221,16 +228,16 @@ const LevelBuilder = ({ levelData, playerRef, enemyRef, lidarParams, hideCeiling
                 type="fixed"
                 sensor
                 onIntersectionEnter={() => {
-                  // playSound('victory'); // Removed to avoid missing dependency if not imported
+                  playSound('exitReached', { intensity: 1.0, spatial: false });
                   winGame();
                 }}
+                position={[position[0], 1, position[2]]}
               >
-                <Box
-                  position={[position[0], 1, position[2]]}
-                  args={[CELL_SIZE, 2, CELL_SIZE]}
-                >
-                  <meshBasicMaterial color="#00FF00" />
-                </Box>
+                {/* Collision box - proper sensor collider */}
+                <CuboidCollider args={[CELL_SIZE / 2, 1, CELL_SIZE / 2]} sensor />
+
+                {/* Visual Portal Model - adjusted */}
+                <PortalModel position={[0, -1, 0]} />
               </RigidBody>
               <Billboard key={`exit-label-${x}-${z}`} position={[position[0], 3.5, position[2]]}>
                 <Text
@@ -268,5 +275,43 @@ const LevelBuilder = ({ levelData, playerRef, enemyRef, lidarParams, hideCeiling
     </>
   );
 };
+
+// Key Model Component
+function KeyModel({ position }) {
+  const { scene } = useGLTF('/models/key.glb');
+  const modelRef = useRef();
+
+  // Rotate around Y axis
+  useFrame((state, delta) => {
+    if (modelRef.current) {
+      modelRef.current.rotation.y += delta * 2; // 2 radians per second
+    }
+  });
+
+  return (
+    <primitive
+      ref={modelRef}
+      object={scene.clone()}
+      position={position}
+      scale={[0.3, 0.3, 0.3]}
+    />
+  );
+}
+
+// Portal Model Component for Exit
+function PortalModel({ position }) {
+  const { scene } = useGLTF('/models/exit_portal.glb');
+  return (
+    <primitive
+      object={scene.clone()}
+      position={position}
+      scale={[1, 1, 1]} // Adjusted to fit CELL_SIZE
+    />
+  );
+}
+
+// Preload models
+useGLTF.preload('/models/key.glb');
+useGLTF.preload('/models/exit_portal.glb');
 
 export default LevelBuilder;

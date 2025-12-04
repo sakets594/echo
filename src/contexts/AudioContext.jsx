@@ -31,7 +31,10 @@ export const AudioProvider = ({ children }) => {
                     'monsterBreathing': '/sounds/monster_breathing.mp3',
                     'playerWalk': '/sounds/player_walk.mp3',
                     'gameOver': '/sounds/game_over.mp3',
-                    'heartbeat': '/sounds/heartbeat.wav'
+                    'heartbeat': '/sounds/heartbeat.wav',
+                    'keyPickup': '/sounds/key_pickup.mp3',
+                    'doorUnlock': '/sounds/door_unlock.mp3',
+                    'exitReached': '/sounds/exit_reached.mp3'
                 };
 
                 for (const [key, url] of Object.entries(sounds)) {
