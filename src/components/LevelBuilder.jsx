@@ -163,7 +163,7 @@ const LevelBuilder = ({ levelData, playerRef, enemyRef, lidarParams, hideCeiling
           );
         } else if (type === 'Key' && !hasKey) {
           items.push(
-            <>
+            <React.Fragment key={`key-group-${x}-${z}`}>
               <RigidBody
                 key={`key-${x}-${z}`}
                 type="fixed"
@@ -192,13 +192,13 @@ const LevelBuilder = ({ levelData, playerRef, enemyRef, lidarParams, hideCeiling
                   KEY
                 </Text>
               </Billboard>
-            </>
+            </React.Fragment>
           );
         } else if (type === 'Locked Door') {
           // Only show locked door if player doesn't have key
           if (!hasKey) {
             items.push(
-              <>
+              <React.Fragment key={`door-group-${x}-${z}`}>
                 <RigidBody key={`door-${x}-${z}`} type="fixed" colliders="cuboid">
                   <Box
                     position={[position[0], WALL_HEIGHT / 2, position[2]]}
@@ -217,12 +217,12 @@ const LevelBuilder = ({ levelData, playerRef, enemyRef, lidarParams, hideCeiling
                     DOOR
                   </Text>
                 </Billboard>
-              </>
+              </React.Fragment>
             );
           }
         } else if (type === 'Exit') {
           items.push(
-            <>
+            <React.Fragment key={`exit-group-${x}-${z}`}>
               <RigidBody
                 key={`exit-${x}-${z}`}
                 type="fixed"
@@ -249,7 +249,7 @@ const LevelBuilder = ({ levelData, playerRef, enemyRef, lidarParams, hideCeiling
                   EXIT
                 </Text>
               </Billboard>
-            </>
+            </React.Fragment>
           );
         } else if (type === 'Start') {
           // Visual marker for start position (can be removed later)

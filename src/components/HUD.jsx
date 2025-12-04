@@ -8,27 +8,10 @@ const HUD = () => {
     const { noiseLevel } = useNoise();
     const { cooldownRemaining, cooldownDuration } = useScanner();
 
+    const isMobile = window.innerWidth < 900;
+
     return (
-        <>
-            {/* Instructions - Hide on mobile */}
-            {window.innerWidth >= 900 && (
-                <div style={{
-                    position: 'absolute',
-                    top: '10px',
-                    left: '10px',
-                    color: 'white',
-                    fontFamily: 'monospace',
-                    fontSize: '14px',
-                    pointerEvents: 'none',
-                    textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
-                }}>
-                    <div>Click to play | WASD: Move | Shift: Crouch | Ctrl: Sprint | SPACE: Clap | L: Lights</div>
-                    <div id="debug-pos">Pos: 0, 0, 0</div>
-                    <div style={{ marginTop: '10px' }}>
-                        Noise: {Math.round(noiseLevel)}% | Keys: {hasKey ? '1' : '0'} / 1 | Lights: {debugLights ? 'ON' : 'OFF'}
-                    </div>
-                </div>
-            )}
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
 
             {/* Status Bars - Top Left */}
             <div style={{
@@ -37,11 +20,12 @@ const HUD = () => {
                 left: '10px',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '5px',
+                gap: isMobile ? '8px' : '10px',
                 pointerEvents: 'none',
                 zIndex: 1500,
-                fontSize: window.innerWidth < 900 ? '9px' : '11px',
-                fontFamily: 'monospace'
+                fontSize: isMobile ? '9px' : '11px',
+                fontFamily: 'monospace',
+                width: isMobile ? '120px' : '150px'
             }}>
                 {/* Noise Bar */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -154,32 +138,36 @@ const HUD = () => {
                     >
                         ⏸
                     </button>
-                    <button
-                        onPointerDown={(e) => {
-                            e.preventDefault();
-                            console.log('[HUD] Light pointerdown');
-                            toggleDebugLights();
-                        }}
-                        style={{
-                            background: debugLights ? 'rgba(255, 255, 0, 0.5)' : 'rgba(0, 0, 0, 0.5)',
-                            border: '1px solid white',
-                            color: 'white',
-                            borderRadius: '50%',
-                            width: '35px',
-                            height: '35px',
-                            fontSize: '16px',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            pointerEvents: 'auto',
-                            touchAction: 'none',
-                            WebkitTapHighlightColor: 'transparent',
-                            userSelect: 'none'
-                        }}
-                    >
-                        💡
-                    </button>
+
+                    {/* Light button - Development Only */}
+                    {import.meta.env.DEV && (
+                        <button
+                            onPointerDown={(e) => {
+                                e.preventDefault();
+                                console.log('[HUD] Light pointerdown');
+                                toggleDebugLights();
+                            }}
+                            style={{
+                                background: debugLights ? 'rgba(255, 255, 0, 0.5)' : 'rgba(0, 0, 0, 0.5)',
+                                border: '1px solid white',
+                                color: 'white',
+                                borderRadius: '50%',
+                                width: '35px',
+                                height: '35px',
+                                fontSize: '16px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                pointerEvents: 'auto',
+                                touchAction: 'none',
+                                WebkitTapHighlightColor: 'transparent',
+                                userSelect: 'none'
+                            }}
+                        >
+                            💡
+                        </button>
+                    )}
                 </div>
             )}
 
@@ -258,7 +246,7 @@ const HUD = () => {
                     )}
                 </div>
             )}
-        </>
+        </div>
     );
 };
 

@@ -35,31 +35,36 @@ const Enemy = ({ spawnPosition, playerRef, enemyRef, levelData, aiConfig = {}, s
         if (enemyRef) enemyRef.current = rigidBodyRef.current;
     }, [enemyRef]);
 
-    const { noiseLevel } = useNoise();
     const { loseGame, gameState } = useGame();
     const { playSound, stopSound } = useAudio();
     const { lastPulseTime, lastPulseOrigin, cooldownDuration } = useScanner();
 
     // Merge config with defaults
-    const config = useMemo(() => ({
-        ...DEFAULT_AI_CONFIG,
-        ...aiConfig
-    }), [aiConfig]);
+    const { noise } = useNoise();
+    const { debugLights } = useGame();
 
-    // Leva Controls for Runtime Tweaking
-    const aiParams = useControls('Enemy AI', {
-        huntSpeed: { value: config.huntSpeed, min: 1, max: 15 },
-        investigateSpeed: { value: config.investigateSpeed, min: 1, max: 10 },
-        patrolSpeed: { value: config.patrolSpeed, min: 1, max: 5 },
-        tremorRadiusWalk: { value: config.tremorRadiusWalk, min: 1, max: 50 },
-        tremorRadiusSprint: { value: config.tremorRadiusSprint, min: 10, max: 100 },
-        breathRadius: { value: config.breathRadius, min: 0.5, max: 10 },
-        lidarRange: { value: config.lidarRange, min: 10, max: 50 },
-        frustrationTime: { value: config.frustrationTime, min: 1, max: 20 },
-        inertiaTime: { value: config.inertiaTime, min: 0, max: 10 },
-        searchDuration: { value: 10, min: 5, max: 30 }, // Added searchDuration control
-        showDebug: false,
-    });
+    // AI params - use Leva controls in dev, defaults in production
+    const aiParams = import.meta.env.DEV
+        ? useControls('Enemy AI', {
+            patrolSpeed: { value: DEFAULT_AI_CONFIG.patrolSpeed, min: 0.5, max: 5.0 },
+            investigateSpeed: { value: DEFAULT_AI_CONFIG.investigateSpeed, min: 0.5, max: 5.0 },
+            huntSpeed: { value: DEFAULT_AI_CONFIG.huntSpeed, min: 1.0, max: 10.0 },
+            tremorRadiusWalk: { value: DEFAULT_AI_CONFIG.tremorRadiusWalk, min: 1.0, max: 20.0 },
+            tremorRadiusSprint: { value: DEFAULT_AI_CONFIG.tremorRadiusSprint, min: 5.0, max: 30.0 },
+            breathRadius: { value: DEFAULT_AI_CONFIG.breathRadius, min: 0.5, max: 10.0 },
+            lidarRange: { value: DEFAULT_AI_CONFIG.lidarRange, min: 5.0, max: 50.0 },
+            searchDuration: { value: DEFAULT_AI_CONFIG.searchDuration, min: 5.0, max: 30.0 },
+        })
+        : {
+            patrolSpeed: DEFAULT_AI_CONFIG.patrolSpeed,
+            investigateSpeed: DEFAULT_AI_CONFIG.investigateSpeed,
+            huntSpeed: DEFAULT_AI_CONFIG.huntSpeed,
+            tremorRadiusWalk: DEFAULT_AI_CONFIG.tremorRadiusWalk,
+            tremorRadiusSprint: DEFAULT_AI_CONFIG.tremorRadiusSprint,
+            breathRadius: DEFAULT_AI_CONFIG.breathRadius,
+            lidarRange: DEFAULT_AI_CONFIG.lidarRange,
+            searchDuration: DEFAULT_AI_CONFIG.searchDuration,
+        };
 
     // Instantiate AI and Movement classes
     const ai = useMemo(() => new EnemyAI(aiParams, rng), [aiParams, rng]);
@@ -294,24 +299,30 @@ const Enemy = ({ spawnPosition, playerRef, enemyRef, levelData, aiConfig = {}, s
 
         // Breathing Sound
         if ((Date.now() / 1000) - (rigidBodyRef.current.lastBreathingTime || 0) > 4.0) {
-            let breathIntensity = 0.5;
-            if (currentState === 'investigate') breathIntensity = 0.7;
-            if (currentState === 'chase') breathIntensity = 1.0;
-            playSound('monsterBreathing', { position: [enemyPos.x, enemyPos.y, enemyPos.z], intensity: breathIntensity });
-            rigidBodyRef.current.lastBreathingTime = Date.now() / 1000;
+            // Ensure we have valid position before playing spatial audio
+            if (isFinite(enemyPos.x) && isFinite(enemyPos.y) && isFinite(enemyPos.z)) {
+                let breathIntensity = 0.5;
+                if (currentState === 'investigate') breathIntensity = 0.7;
+                if (currentState === 'chase') breathIntensity = 1.0;
+                playSound('monsterBreathing', { position: [enemyPos.x, enemyPos.y, enemyPos.z], intensity: breathIntensity });
+                rigidBodyRef.current.lastBreathingTime = Date.now() / 1000;
+            }
         }
 
         // Debug UI
         const debugEl = document.getElementById('enemy-debug-ui');
         if (debugEl) {
+            // Validate position has finite values before displaying
+            const hasValidPos = isFinite(enemyPos.x) && isFinite(enemyPos.y) && isFinite(enemyPos.z);
+            const enemyStr = hasValidPos ? `${enemyPos.x.toFixed(1)},${enemyPos.z.toFixed(1)}` : 'INVALID';
+
             const targetStr = aiResult.targetPosition ? `${aiResult.targetPosition.x.toFixed(1)},${aiResult.targetPosition.z.toFixed(1)}` : 'NONE';
-            const enemyStr = `${enemyPos.x.toFixed(1)},${enemyPos.z.toFixed(1)}`;
 
             let distToTarget = 0;
-            if (aiResult.targetPosition) {
+            if (aiResult.targetPosition && hasValidPos) {
                 distToTarget = enemyVec.distanceTo(new Vector3(aiResult.targetPosition.x, 0, aiResult.targetPosition.z));
             }
-            const distStr = distToTarget.toFixed(1);
+            const distStr = hasValidPos ? distToTarget.toFixed(1) : 'N/A';
             const vel = rigidBodyRef.current.linvel();
             const velStr = `${vel.x.toFixed(1)},${vel.z.toFixed(1)}`;
             const velMag = Math.sqrt(vel.x ** 2 + vel.z ** 2).toFixed(1);
@@ -325,7 +336,7 @@ const Enemy = ({ spawnPosition, playerRef, enemyRef, levelData, aiConfig = {}, s
         }
 
         // Update Visualizers (Test Mode)
-        if (pathLineRef.current) {
+        if (pathLineRef.current && isFinite(enemyPos.x) && isFinite(enemyPos.z)) {
             const points = moveResult.path.map(p => new Vector3(p.x, 1, p.z));
             // Add current pos as start
             points.unshift(new Vector3(enemyPos.x, 1, enemyPos.z));
@@ -348,7 +359,6 @@ const Enemy = ({ spawnPosition, playerRef, enemyRef, levelData, aiConfig = {}, s
 
     // Calculate if enemy should be visible (when lidar is active or in chase mode)
     const [isVisible, setIsVisible] = useState(false);
-    const { debugLights } = useGame();
     const lastVisibleTime = useRef(0);
     const LIDAR_VISIBILITY_DURATION = 2.0; // Visible for 2 seconds after lidar hit
 
@@ -367,6 +377,16 @@ const Enemy = ({ spawnPosition, playerRef, enemyRef, levelData, aiConfig = {}, s
         // Visible if: debug lights ON, in chase mode, or recently hit by lidar
         setIsVisible(debugLights || currentState === 'chase' || isLidarVisible);
     });
+
+    // Log spawn position for debugging
+    useEffect(() => {
+        console.log('[Enemy] Spawn position:', spawnPosition);
+        if (!spawnPosition || !Array.isArray(spawnPosition) || spawnPosition.length !== 3) {
+            console.error('[Enemy] INVALID spawn position!', spawnPosition);
+        } else if (!isFinite(spawnPosition[0]) || !isFinite(spawnPosition[1]) || !isFinite(spawnPosition[2])) {
+            console.error('[Enemy] Spawn position contains NaN/Infinity!', spawnPosition);
+        }
+    }, [spawnPosition]);
 
     return (
         <RigidBody

@@ -46,12 +46,20 @@ function GameScene({ levelData, onLevelComplete }) {
   const { gameState, debugLights } = useGame();
   const lightRef = useRef();
 
-  const lidarParams = useControls('Lidar Pulse', {
-    waveSpeed: { value: LIDAR_DEFAULTS.WAVE_SPEED, min: 5.0, max: 50.0 },
-    fadeDuration: { value: LIDAR_DEFAULTS.FADE_DURATION, min: 0.05, max: 5.0 },
-    maxDistance: { value: LIDAR_DEFAULTS.MAX_DISTANCE, min: 10.0, max: 100.0 },
-    occlusion: { value: LIDAR_DEFAULTS.OCCLUSION_ENABLED },
-  });
+  // Lidar params - use Leva controls in dev, defaults in production
+  const lidarParams = import.meta.env.DEV
+    ? useControls('Lidar Pulse', {
+      waveSpeed: { value: LIDAR_DEFAULTS.WAVE_SPEED, min: 5.0, max: 50.0 },
+      fadeDuration: { value: LIDAR_DEFAULTS.FADE_DURATION, min: 0.05, max: 5.0 },
+      maxDistance: { value: LIDAR_DEFAULTS.MAX_DISTANCE, min: 5.0, max: 50.0 },
+      occlusionEnabled: { value: LIDAR_DEFAULTS.OCCLUSION_ENABLED },
+    })
+    : {
+      waveSpeed: LIDAR_DEFAULTS.WAVE_SPEED,
+      fadeDuration: LIDAR_DEFAULTS.FADE_DURATION,
+      maxDistance: LIDAR_DEFAULTS.MAX_DISTANCE,
+      occlusionEnabled: LIDAR_DEFAULTS.OCCLUSION_ENABLED,
+    };
 
   // Calculate start position when level changes
   const startPos = useMemo(() => {
@@ -174,6 +182,11 @@ function DebugPanel() {
     </div>
   );
 }
+
+// Helper to detect actual mobile devices (not just small screens)
+const isMobileDevice = () => {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+};
 
 function App() {
   const [currentLevel, setCurrentLevel] = useState(allLevels[0]);
@@ -327,33 +340,26 @@ function GameContent({ currentLevel, setCurrentLevel, allLevels }) {
           <Physics gravity={[0, -9.81, 0]}>
             <GameScene levelData={currentLevel} onLevelComplete={handleLevelComplete} />
           </Physics>
-          {window.innerWidth >= 900 && <Stats />}
         </Suspense>
       </Canvas>
-      <DebugPanel />
-      {window.innerWidth >= 900 && <Leva collapsed />}
-      <div style={{
-        position: 'absolute',
-        bottom: '10px',
-        right: '10px',
-        color: 'rgba(255, 255, 255, 0.5)',
-        fontFamily: 'monospace',
-        fontSize: '12px',
-        pointerEvents: 'none'
-      }}>
-        Audio assets from Pixabay.com<br />
-        Heartbeat sound from l4rzy/semicute on GitHub
-      </div>
       <HUD />
-      {gameState === 'level_transition' && <LevelCompleteOverlay />}
-      {window.innerWidth >= 900 && (
-        <LevelSelector
-          levels={allLevels}
-          currentLevelId={currentLevel?.level_id}
-          onLevelSelect={setCurrentLevel}
-        />
+
+      {/* All debug UI - Development Only */}
+      {import.meta.env.DEV && (
+        <>
+          <DebugPanel />
+          <Leva collapsed />
+          <LevelSelector
+            levels={allLevels}
+            currentLevelId={currentLevel?.level_id}
+            onLevelSelect={setCurrentLevel}
+          />
+          <Stats />
+        </>
       )}
-      {gameState === 'playing' && <MobileControls />}
+
+      {/* Mobile Controls - Only on mobile devices */}
+      {gameState === 'playing' && isMobileDevice() && <MobileControls />}
       {/* Heartbeat Vignette */}
       <div id="heartbeat-vignette" style={{
         position: 'fixed',

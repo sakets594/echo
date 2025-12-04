@@ -47,9 +47,8 @@ export const GameProvider = ({ children }) => {
     }, []);
 
     const toggleDebugLights = useCallback(() => {
-        console.log('[GameContext] toggleDebugLights called. Current state:', !debugLights);
         setDebugLights(prev => !prev);
-    }, [debugLights]);
+    }, []);
 
     const winGame = useCallback(() => {
         console.log('Game Won!');

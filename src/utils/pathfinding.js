@@ -14,15 +14,21 @@ const STRAIGHT_COST = 1;
  * @returns {Array<Vector3>} - Array of waypoints (world coordinates)
  */
 export const findPath = (start, end, layout, legend, cellSize = 2) => {
-    // Convert world coordinates to grid coordinates
-    const startGrid = worldToGrid(start, cellSize);
-    const endGrid = worldToGrid(end, cellSize);
+    // Convert world positions to grid coordinates
+    const startGridX = Math.floor(start.x / cellSize);
+    const startGridZ = Math.floor(start.z / cellSize);
+    const endGridX = Math.floor(end.x / cellSize);
+    const endGridZ = Math.floor(end.z / cellSize);
 
-    // Ensure start and end are within bounds
-    if (!isValid(startGrid, layout) || !isValid(endGrid, layout)) {
-        console.warn('Pathfinding: Start or End position is out of bounds');
+    // Check bounds silently - return empty path if out of bounds
+    if (startGridX < 0 || startGridX >= layout[0].length || startGridZ < 0 || startGridZ >= layout.length ||
+        endGridX < 0 || endGridX >= layout[0].length || endGridZ < 0 || endGridZ >= layout.length) {
         return [];
     }
+
+    // Reconstruct grid objects for consistency with existing logic
+    const startGrid = { x: startGridX, z: startGridZ };
+    const endGrid = { x: endGridX, z: endGridZ };
 
     // Check if end is walkable, if not, find nearest walkable neighbor
     let targetGrid = endGrid;
