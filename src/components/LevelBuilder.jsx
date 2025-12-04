@@ -278,8 +278,8 @@ const LevelBuilder = ({ levelData, playerRef, enemyRef, lidarParams, hideCeiling
 
 // Key Model Component
 function KeyModel({ position }) {
-  const { scene } = useGLTF('/models/key.glb');
   const modelRef = useRef();
+  const { scene } = useGLTF(`${import.meta.env.BASE_URL}models/key.glb`);
 
   // Rotate around Y axis
   useFrame((state, delta) => {
@@ -300,7 +300,7 @@ function KeyModel({ position }) {
 
 // Portal Model Component for Exit
 function PortalModel({ position }) {
-  const { scene } = useGLTF('/models/exit_portal.glb');
+  const { scene } = useGLTF(`${import.meta.env.BASE_URL}models/exit_portal.glb`);
   return (
     <primitive
       object={scene.clone()}
@@ -310,8 +310,8 @@ function PortalModel({ position }) {
   );
 }
 
-// Preload models
-useGLTF.preload('/models/key.glb');
-useGLTF.preload('/models/exit_portal.glb');
+// Preload models for better performance
+useGLTF.preload(`${import.meta.env.BASE_URL}models/exit_portal.glb`);
+useGLTF.preload(`${import.meta.env.BASE_URL}models/key.glb`);
 
 export default LevelBuilder;

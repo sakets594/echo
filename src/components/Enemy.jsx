@@ -445,7 +445,7 @@ const Enemy = ({ spawnPosition, playerRef, enemyRef, levelData, aiConfig = {}, s
 
 // Enemy 3D Model Component
 function EnemyModel({ position }) {
-    const { scene } = useGLTF('/models/enemy.glb');
+    const { scene } = useGLTF(`${import.meta.env.BASE_URL}models/enemy.glb`);
     return (
         <primitive
             object={scene.clone()}
@@ -456,6 +456,6 @@ function EnemyModel({ position }) {
 }
 
 // Preload the model
-useGLTF.preload('/models/enemy.glb');
+useGLTF.preload(`${import.meta.env.BASE_URL}models/enemy.glb`);
 
 export default Enemy;
