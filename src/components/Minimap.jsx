@@ -51,7 +51,7 @@ const Minimap = ({ levelData, playerRef, enemyRef }) => {
         });
 
         // Add Player Arrow
-                const playerShape = new THREE.Shape();
+        const playerShape = new THREE.Shape();
         // A symmetrical chevron shape defined with a counter-clockwise path.
         // This ensures the shape's front face is correctly oriented.
         playerShape.moveTo(0, 1.5);      // Tip
@@ -256,12 +256,30 @@ const Minimap = ({ levelData, playerRef, enemyRef }) => {
                     top={size.height / 2}
                     bottom={-size.height / 2}
                 />
-                <mesh position={[size.width / 2 - MINIMAP_SIZE / 2 - 20, -size.height / 2 + MINIMAP_SIZE / 2 + 20, 0]}>
-                    <planeGeometry args={[MINIMAP_SIZE, MINIMAP_SIZE]} />
+                {/* 
+                    Positioning:
+                    We want it in the top-right or top-left?
+                    User said "we can have debug panels and level come over minimap when they are extended".
+                    Level selector is top-right.
+                    Let's put it Top-Right, but maybe slightly offset so it doesn't block the very corner?
+                    Or Top-Left? HUD text is Top-Left.
+                    
+                    Let's try Top-Right, but scaled down for mobile.
+                    
+                    Mobile check: width < 900
+                */}
+                <mesh
+                    position={[
+                        size.width / 2 - (size.width < 900 ? 60 : 120), // X: Right side, offset by half size + margin
+                        size.height / 2 - (size.width < 900 ? 60 : 120), // Y: Top side, offset by half size + margin
+                        0
+                    ]}
+                >
+                    <planeGeometry args={[size.width < 900 ? 80 : 200, size.width < 900 ? 80 : 200]} />
                     <meshBasicMaterial map={target.texture} />
                     {/* Border */}
                     <lineSegments>
-                        <edgesGeometry args={[new THREE.PlaneGeometry(MINIMAP_SIZE, MINIMAP_SIZE)]} />
+                        <edgesGeometry args={[new THREE.PlaneGeometry(size.width < 900 ? 80 : 200, size.width < 900 ? 80 : 200)]} />
                         <lineBasicMaterial color="white" />
                     </lineSegments>
                 </mesh>

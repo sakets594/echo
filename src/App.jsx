@@ -11,6 +11,7 @@ import { ScannerProvider } from './contexts/ScannerContext';
 import { AudioProvider } from './contexts/AudioContext';
 import Minimap from './components/Minimap';
 import LevelSelector from './components/LevelSelector';
+import { InputProvider } from './contexts/InputContext';
 
 import { useScanner } from './contexts/ScannerContext';
 import { useNoise } from './contexts/NoiseContext';
@@ -42,7 +43,7 @@ function GameScene({ levelData, onLevelComplete }) {
   const playerRef = useRef();
   const enemyRef = useRef();
   const { lastPulseOrigin, lastPulseTime } = useScanner();
-  const { gameState } = useGame();
+  const { gameState, debugLights } = useGame();
   const lightRef = useRef();
 
   const lidarParams = useControls('Lidar Pulse', {
@@ -98,8 +99,8 @@ function GameScene({ levelData, onLevelComplete }) {
         shadow-camera-far={lidarParams.maxDistance}
       />
 
-      {/* Ambient light for base visibility (very low) */}
-      <ambientLight intensity={0.02} />
+      {/* Ambient light for base visibility (very low normally, high if debugLights is on) */}
+      <ambientLight intensity={debugLights ? 2.0 : 0.02} />
 
       <LevelBuilder levelData={levelData} playerRef={playerRef} enemyRef={enemyRef} lidarParams={lidarParams} />
       <Player startPosition={startPos} playerRef={playerRef} key={levelData.level_id} />
@@ -112,6 +113,10 @@ function GameScene({ levelData, onLevelComplete }) {
 
 function DebugPanel() {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const isMobile = window.innerWidth < 900;
+
+  // Don't render on mobile
+  if (isMobile) return null;
 
   return (
     <div style={{
@@ -178,17 +183,19 @@ function App() {
   // For simplicity, let's create a GameContent component.
   return (
     <GameProvider>
-      <NoiseProvider>
-        <ScannerProvider>
-          <AudioProvider>
-            <GameContent
-              currentLevel={currentLevel}
-              setCurrentLevel={setCurrentLevel}
-              allLevels={allLevels}
-            />
-          </AudioProvider>
-        </ScannerProvider>
-      </NoiseProvider>
+      <InputProvider>
+        <NoiseProvider>
+          <ScannerProvider>
+            <AudioProvider>
+              <GameContent
+                currentLevel={currentLevel}
+                setCurrentLevel={setCurrentLevel}
+                allLevels={allLevels}
+              />
+            </AudioProvider>
+          </ScannerProvider>
+        </NoiseProvider>
+      </InputProvider>
     </GameProvider>
   );
 }
@@ -198,6 +205,8 @@ import PauseScreen from './components/PauseScreen';
 import HeartbeatSystem from './components/HeartbeatSystem';
 
 import AITestArena from './components/debug/AITestArena';
+import MobileControls from './components/MobileControls';
+import RotateDevicePrompt from './components/RotateDevicePrompt';
 
 function GameContent({ currentLevel, setCurrentLevel, allLevels }) {
   const { gameState, setGameState, resetGameState, saveProgress, loadProgress, startGame, pauseGame, resumeGame } = useGame();
@@ -299,6 +308,7 @@ function GameContent({ currentLevel, setCurrentLevel, allLevels }) {
 
   return (
     <div style={{ width: '100vw', height: '100vh' }}>
+      <RotateDevicePrompt />
       {gameState === 'start' && (
         <StartScreen
           onContinue={handleContinue}
@@ -317,11 +327,11 @@ function GameContent({ currentLevel, setCurrentLevel, allLevels }) {
           <Physics gravity={[0, -9.81, 0]}>
             <GameScene levelData={currentLevel} onLevelComplete={handleLevelComplete} />
           </Physics>
-          <Stats />
+          {window.innerWidth >= 900 && <Stats />}
         </Suspense>
       </Canvas>
       <DebugPanel />
-      <Leva collapsed />
+      {window.innerWidth >= 900 && <Leva collapsed />}
       <div style={{
         position: 'absolute',
         bottom: '10px',
@@ -336,11 +346,14 @@ function GameContent({ currentLevel, setCurrentLevel, allLevels }) {
       </div>
       <HUD />
       {gameState === 'level_transition' && <LevelCompleteOverlay />}
-      <LevelSelector
-        levels={allLevels}
-        currentLevelId={currentLevel?.level_id}
-        onLevelSelect={setCurrentLevel}
-      />
+      {window.innerWidth >= 900 && (
+        <LevelSelector
+          levels={allLevels}
+          currentLevelId={currentLevel?.level_id}
+          onLevelSelect={setCurrentLevel}
+        />
+      )}
+      {gameState === 'playing' && <MobileControls />}
       <div id="heartbeat-vignette" style={{
         position: 'absolute',
         top: 0,

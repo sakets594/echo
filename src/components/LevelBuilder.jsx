@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useCallback } from 'react';
-import { Box } from '@react-three/drei';
+import { Box, Text, Billboard } from '@react-three/drei';
 import { RigidBody } from '@react-three/rapier';
 import { useGame } from '../contexts/GameContext';
 import { useScanner } from '../contexts/ScannerContext';
@@ -159,54 +159,90 @@ const LevelBuilder = ({ levelData, playerRef, enemyRef, lidarParams, hideCeiling
               />
             </RigidBody>
           );
-        } else if (type === 'Key') {
+        } else if (type === 'Key' && !hasKey) {
           items.push(
-            <RigidBody
-              key={`key-${x}-${z}`}
-              type="fixed"
-              sensor
-              onIntersectionEnter={() => collectKey()}
-            >
-              <Box
-                position={[position[0], 1, position[2]]}
-                args={[0.5, 0.5, 0.5]}
+            <>
+              <RigidBody
+                key={`key-${x}-${z}`}
+                type="fixed"
+                sensor
+                onIntersectionEnter={() => collectKey()}
               >
-                <meshBasicMaterial color="#FFD700" />
-              </Box>
-            </RigidBody>
+                <Box
+                  position={[position[0], 1, position[2]]}
+                  args={[0.5, 0.5, 0.5]}
+                >
+                  <meshBasicMaterial color="#FFD700" />
+                </Box>
+              </RigidBody>
+              <Billboard key={`key-label-${x}-${z}`} position={[position[0], 2, position[2]]}>
+                <Text
+                  fontSize={0.3}
+                  color="gold"
+                  anchorX="center"
+                  anchorY="middle"
+                >
+                  KEY
+                </Text>
+              </Billboard>
+            </>
           );
         } else if (type === 'Locked Door') {
           // Only show locked door if player doesn't have key
           if (!hasKey) {
             items.push(
-              <RigidBody key={`door-${x}-${z}`} type="fixed" colliders="cuboid">
-                <Box
-                  position={[position[0], WALL_HEIGHT / 2, position[2]]}
-                  args={[CELL_SIZE, WALL_HEIGHT, CELL_SIZE]}
-                >
-                  <meshBasicMaterial color="#8B0000" />
-                </Box>
-              </RigidBody>
+              <>
+                <RigidBody key={`door-${x}-${z}`} type="fixed" colliders="cuboid">
+                  <Box
+                    position={[position[0], WALL_HEIGHT / 2, position[2]]}
+                    args={[CELL_SIZE, WALL_HEIGHT, CELL_SIZE]}
+                  >
+                    <meshBasicMaterial color="#8B0000" />
+                  </Box>
+                </RigidBody>
+                <Billboard key={`door-label-${x}-${z}`} position={[position[0], WALL_HEIGHT + 0.5, position[2]]}>
+                  <Text
+                    fontSize={0.4}
+                    color="darkred"
+                    anchorX="center"
+                    anchorY="middle"
+                  >
+                    DOOR
+                  </Text>
+                </Billboard>
+              </>
             );
           }
         } else if (type === 'Exit') {
           items.push(
-            <RigidBody
-              key={`exit-${x}-${z}`}
-              type="fixed"
-              sensor
-              onIntersectionEnter={() => {
-                // playSound('victory'); // Removed to avoid missing dependency if not imported
-                winGame();
-              }}
-            >
-              <Box
-                position={[position[0], 1, position[2]]}
-                args={[CELL_SIZE, 2, CELL_SIZE]}
+            <>
+              <RigidBody
+                key={`exit-${x}-${z}`}
+                type="fixed"
+                sensor
+                onIntersectionEnter={() => {
+                  // playSound('victory'); // Removed to avoid missing dependency if not imported
+                  winGame();
+                }}
               >
-                <meshBasicMaterial color="#00FF00" />
-              </Box>
-            </RigidBody>
+                <Box
+                  position={[position[0], 1, position[2]]}
+                  args={[CELL_SIZE, 2, CELL_SIZE]}
+                >
+                  <meshBasicMaterial color="#00FF00" />
+                </Box>
+              </RigidBody>
+              <Billboard key={`exit-label-${x}-${z}`} position={[position[0], 3.5, position[2]]}>
+                <Text
+                  fontSize={0.5}
+                  color="lime"
+                  anchorX="center"
+                  anchorY="middle"
+                >
+                  EXIT
+                </Text>
+              </Billboard>
+            </>
           );
         } else if (type === 'Start') {
           // Visual marker for start position (can be removed later)

@@ -12,8 +12,8 @@ const HeartbeatSystem = ({ playerRef, enemyRef }) => {
     // Constants
     const SAFE_DISTANCE = 25;
     const CAUTION_DISTANCE = 10;
-    const MIN_BPM = 60;
-    const MAX_BPM = 160;
+    const MIN_BPM = 20; // Reduced from 50
+    const MAX_BPM = 80; // Reduced from 140
 
     useEffect(() => {
         // Get reference to the vignette DOM element
@@ -87,10 +87,10 @@ const HeartbeatSystem = ({ playerRef, enemyRef }) => {
             if (currentTime - lastBeatTime.current > beatInterval) {
                 // Play heartbeat sound (thump-thump)
                 // We play two sounds slightly offset to simulate a heartbeat
-                playSound('heartbeat', { intensity: intensity * 0.5, spatial: false });
+                playSound('heartbeat', { intensity: intensity * 0.1, spatial: false }); // 10% volume
 
                 setTimeout(() => {
-                    playSound('heartbeat', { intensity: intensity * 0.4, spatial: false });
+                    playSound('heartbeat', { intensity: intensity * 0.15, spatial: false }); // 15% volume
                 }, 100); // 100ms delay for second beat
 
                 lastBeatTime.current = currentTime;

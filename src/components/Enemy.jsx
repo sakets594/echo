@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { RigidBody, CuboidCollider } from '@react-three/rapier';
-import { Line } from '@react-three/drei';
+import { Line, Text, Billboard } from '@react-three/drei';
 import { Vector3, Raycaster } from 'three';
 import { useNoise } from '../contexts/NoiseContext';
 import { useGame } from '../contexts/GameContext';
@@ -127,7 +127,10 @@ const Enemy = ({ spawnPosition, playerRef, enemyRef, levelData, aiConfig = {}, s
         const currentTime = performance.now() / 1000;
         const timeSincePulse = currentTime - lastPulseTime;
 
-        if (timeSincePulse < cooldownDuration) {
+        // Flag to disable lidar triggering enemy (for now)
+        const LIDAR_TRIGGERS_ENEMY = false;
+
+        if (LIDAR_TRIGGERS_ENEMY && timeSincePulse < cooldownDuration) {
             const pulseOrigin = new Vector3(...lastPulseOrigin);
             const distToPulse = enemyVec.distanceTo(pulseOrigin);
 
@@ -342,6 +345,28 @@ const Enemy = ({ spawnPosition, playerRef, enemyRef, levelData, aiConfig = {}, s
     // Debug Visuals Refs
     const pathLineRef = useRef();
 
+    // Calculate if enemy should be visible (when lidar is active or in chase mode)
+    const [isVisible, setIsVisible] = useState(false);
+    const { debugLights } = useGame();
+    const lastVisibleTime = useRef(0);
+    const LIDAR_VISIBILITY_DURATION = 2.0; // Visible for 2 seconds after lidar hit
+
+    useFrame(() => {
+        const currentTime = performance.now() / 1000;
+        const timeSincePulse = currentTime - lastPulseTime;
+
+        // Check if lidar just hit
+        if (timeSincePulse < 0.1) {
+            lastVisibleTime.current = currentTime;
+        }
+
+        const timeSinceVisible = currentTime - lastVisibleTime.current;
+        const isLidarVisible = timeSinceVisible < LIDAR_VISIBILITY_DURATION;
+
+        // Visible if: debug lights ON, in chase mode, or recently hit by lidar
+        setIsVisible(debugLights || currentState === 'chase' || isLidarVisible);
+    });
+
     return (
         <RigidBody
             ref={rigidBodyRef}
@@ -352,30 +377,47 @@ const Enemy = ({ spawnPosition, playerRef, enemyRef, levelData, aiConfig = {}, s
             lockRotations
         >
             <CuboidCollider args={[ENEMY_SIZE / 2, ENEMY_HEIGHT / 2, ENEMY_SIZE / 2]} position={[0, ENEMY_HEIGHT / 2, 0]} />
-            <mesh position={[0, ENEMY_HEIGHT / 2, 0]}>
-                <boxGeometry args={[ENEMY_SIZE, ENEMY_HEIGHT, ENEMY_SIZE]} />
-                <meshStandardMaterial color={getColor()} emissive={getColor()} emissiveIntensity={0.5} />
-            </mesh>
 
-            {/* Debug Visuals */}
-            {aiParams.showDebug && (
+            {isVisible && (
                 <>
-                    {/* Path Line */}
-                    <Line ref={pathLineRef} color="red" lineWidth={2} />
+                    {/* Enemy Label - Always faces camera */}
+                    <Billboard position={[0, ENEMY_HEIGHT + 1, 0]}>
+                        <Text
+                            fontSize={0.5}
+                            color="red"
+                            anchorX="center"
+                            anchorY="middle"
+                        >
+                            ENEMY
+                        </Text>
+                    </Billboard>
 
-                    {/* Sensory Spheres */}
                     <mesh position={[0, ENEMY_HEIGHT / 2, 0]}>
-                        <sphereGeometry args={[aiParams.tremorRadiusWalk, 16, 16]} />
-                        <meshBasicMaterial color="yellow" wireframe transparent opacity={0.2} />
+                        <boxGeometry args={[ENEMY_SIZE, ENEMY_HEIGHT, ENEMY_SIZE]} />
+                        <meshStandardMaterial color={getColor()} emissive={getColor()} emissiveIntensity={0.5} />
                     </mesh>
-                    <mesh position={[0, ENEMY_HEIGHT / 2, 0]}>
-                        <sphereGeometry args={[aiParams.tremorRadiusSprint, 16, 16]} />
-                        <meshBasicMaterial color="orange" wireframe transparent opacity={0.2} />
-                    </mesh>
-                    <mesh position={[0, ENEMY_HEIGHT / 2, 0]}>
-                        <sphereGeometry args={[aiParams.lidarRange, 16, 16]} />
-                        <meshBasicMaterial color="cyan" wireframe transparent opacity={0.1} />
-                    </mesh>
+
+                    {/* Debug Visuals */}
+                    {aiParams.showDebug && (
+                        <>
+                            {/* Path Line */}
+                            <Line ref={pathLineRef} color="red" lineWidth={2} />
+
+                            {/* Sensory Spheres */}
+                            <mesh position={[0, ENEMY_HEIGHT / 2, 0]}>
+                                <sphereGeometry args={[aiParams.tremorRadiusWalk, 16, 16]} />
+                                <meshBasicMaterial color="yellow" wireframe transparent opacity={0.2} />
+                            </mesh>
+                            <mesh position={[0, ENEMY_HEIGHT / 2, 0]}>
+                                <sphereGeometry args={[aiParams.tremorRadiusSprint, 16, 16]} />
+                                <meshBasicMaterial color="orange" wireframe transparent opacity={0.2} />
+                            </mesh>
+                            <mesh position={[0, ENEMY_HEIGHT / 2, 0]}>
+                                <sphereGeometry args={[aiParams.lidarRange, 16, 16]} />
+                                <meshBasicMaterial color="cyan" wireframe transparent opacity={0.1} />
+                            </mesh>
+                        </>
+                    )}
                 </>
             )}
         </RigidBody>

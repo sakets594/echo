@@ -82,84 +82,103 @@ const PauseScreen = ({ onRestart, onQuit }) => {
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 2000,
-            fontFamily: 'monospace'
+            fontFamily: 'monospace',
+            padding: '20px',
+            boxSizing: 'border-box',
+            overflowY: 'auto'
         }}>
-            <h1 style={{ fontSize: '3rem', marginBottom: '40px', textShadow: '0 0 10px #fff' }}>
+            <h1 style={{
+                fontSize: 'clamp(2rem, 5vw, 3rem)',
+                marginBottom: '20px',
+                textShadow: '0 0 10px #fff',
+                marginTop: 'auto'
+            }}>
                 PAUSED
             </h1>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '300px' }}>
-                <button
-                    onClick={resumeGame}
-                    style={{
-                        padding: '15px',
-                        fontSize: '1.2rem',
-                        backgroundColor: '#fff',
-                        color: '#000',
-                        border: 'none',
-                        cursor: 'pointer',
-                        fontFamily: 'monospace',
-                        fontWeight: 'bold'
-                    }}
-                >
-                    RESUME
-                </button>
-                <button
-                    onClick={() => setShowGuide(true)}
-                    style={{
-                        padding: '15px',
-                        fontSize: '1.2rem',
-                        backgroundColor: '#333',
-                        color: '#fff',
-                        border: '1px solid #fff',
-                        cursor: 'pointer',
-                        fontFamily: 'monospace',
-                        fontWeight: 'bold'
-                    }}
-                >
-                    SURVIVAL GUIDE
-                </button>
-                <button
-                    onClick={onRestart}
-                    style={{
-                        padding: '15px',
-                        fontSize: '1.2rem',
-                        backgroundColor: 'transparent',
-                        color: '#fff',
-                        border: '1px solid #fff',
-                        cursor: 'pointer',
-                        fontFamily: 'monospace',
-                        fontWeight: 'bold'
-                    }}
-                >
-                    RESTART LEVEL
-                </button>
-                <button
-                    onClick={onQuit}
-                    style={{
-                        padding: '15px',
-                        fontSize: '1.2rem',
-                        backgroundColor: 'transparent',
-                        color: '#888',
-                        border: '1px solid #888',
-                        cursor: 'pointer',
-                        fontFamily: 'monospace',
-                        fontWeight: 'bold'
-                    }}
-                >
-                    QUIT TO MENU
-                </button>
-            </div>
+            <div style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '40px',
+                justifyContent: 'center',
+                alignItems: 'center',
+                width: '100%',
+                maxWidth: '800px',
+                marginBottom: 'auto'
+            }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', width: '300px' }}>
+                    <button
+                        onClick={resumeGame}
+                        style={{
+                            padding: '12px',
+                            fontSize: '1.1rem',
+                            backgroundColor: '#fff',
+                            color: '#000',
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontFamily: 'monospace',
+                            fontWeight: 'bold'
+                        }}
+                    >
+                        RESUME
+                    </button>
+                    <button
+                        onClick={() => setShowGuide(true)}
+                        style={{
+                            padding: '12px',
+                            fontSize: '1.1rem',
+                            backgroundColor: '#333',
+                            color: '#fff',
+                            border: '1px solid #fff',
+                            cursor: 'pointer',
+                            fontFamily: 'monospace',
+                            fontWeight: 'bold'
+                        }}
+                    >
+                        SURVIVAL GUIDE
+                    </button>
+                    <button
+                        onClick={onRestart}
+                        style={{
+                            padding: '12px',
+                            fontSize: '1.1rem',
+                            backgroundColor: 'transparent',
+                            color: '#fff',
+                            border: '1px solid #fff',
+                            cursor: 'pointer',
+                            fontFamily: 'monospace',
+                            fontWeight: 'bold'
+                        }}
+                    >
+                        RESTART LEVEL
+                    </button>
+                    <button
+                        onClick={onQuit}
+                        style={{
+                            padding: '12px',
+                            fontSize: '1.1rem',
+                            backgroundColor: 'transparent',
+                            color: '#888',
+                            border: '1px solid #888',
+                            cursor: 'pointer',
+                            fontFamily: 'monospace',
+                            fontWeight: 'bold'
+                        }}
+                    >
+                        QUIT TO MENU
+                    </button>
+                </div>
 
-            <div style={{ marginTop: '40px', textAlign: 'center' }}>
-                <h3 style={{ borderBottom: '1px solid #444', paddingBottom: '10px', marginBottom: '10px' }}>CONTROLS</h3>
-                <ul style={{ listStyle: 'none', padding: 0, fontSize: '0.9rem' }}>
-                    {UI_TEXT.CONTROLS.map((ctrl, i) => (
-                        <li key={i} style={{ marginBottom: '5px', color: '#ccc' }}>
-                            <span style={{ color: '#fff', fontWeight: 'bold' }}>{ctrl.key}</span> : {ctrl.action}
-                        </li>
-                    ))}
-                </ul>
+                <div style={{ textAlign: 'center', minWidth: '250px' }}>
+                    <h3 style={{ borderBottom: '1px solid #444', paddingBottom: '10px', marginBottom: '10px' }}>CONTROLS</h3>
+                    <ul style={{ listStyle: 'none', padding: 0, fontSize: '0.9rem' }}>
+                        {UI_TEXT.CONTROLS.map((ctrl, i) => (
+                            <li key={i} style={{ marginBottom: '5px', color: '#ccc' }}>
+                                <span style={{ color: '#fff', fontWeight: 'bold' }}>{ctrl.key}</span> : {ctrl.action}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
             </div>
         </div>
     );

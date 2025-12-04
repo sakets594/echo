@@ -14,10 +14,19 @@ export const GameProvider = ({ children }) => {
     const [gameState, setGameState] = useState('start'); // 'start', 'playing', 'won', 'lost', 'level_transition'
     const [hasKey, setHasKey] = useState(false);
     const [canRestart, setCanRestart] = useState(false);
-    const [debugLights, setDebugLights] = useState(false);
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const [debugLights, setDebugLights] = useState(false); // Default OFF for all devices
 
     const startGame = useCallback(() => {
         setGameState('playing');
+
+        // Enter fullscreen on mobile
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        if (isMobile && document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen().catch(err => {
+                console.log('[GameContext] Fullscreen request failed:', err);
+            });
+        }
     }, []);
 
     const pauseGame = useCallback(() => {
@@ -38,9 +47,9 @@ export const GameProvider = ({ children }) => {
     }, []);
 
     const toggleDebugLights = useCallback(() => {
-        console.log('debug lights toggled!');
+        console.log('[GameContext] toggleDebugLights called. Current state:', !debugLights);
         setDebugLights(prev => !prev);
-    }, []);
+    }, [debugLights]);
 
     const winGame = useCallback(() => {
         console.log('Game Won!');

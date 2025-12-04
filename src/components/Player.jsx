@@ -7,6 +7,7 @@ import { useNoise } from '../contexts/NoiseContext';
 import { useGame } from '../contexts/GameContext';
 import { useScanner } from '../contexts/ScannerContext';
 import { useAudio } from '../contexts/AudioContext';
+import { useInput } from '../contexts/InputContext';
 
 const WALK_SPEED = 5;
 const CROUCH_SPEED = 2.5;
@@ -27,11 +28,13 @@ const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
     const { gameState, toggleDebugLights } = useGame();
     const { emitPulse } = useScanner();
     const { playSound } = useAudio();
+    const { inputState, consumeAction } = useInput();
 
     // Stamina System
     const [stamina, setStamina] = useState(100);
     const [isPanting, setIsPanting] = useState(false);
     const pantingTimer = useRef(0);
+    const lastFootstepTime = useRef(0);
 
     // Expose rigidBodyRef to parent
     React.useEffect(() => {
@@ -45,99 +48,18 @@ const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
         }
     }, [playerRef, startPosition]);
 
-    // Movement state
-    const moveForward = useRef(false);
-    const moveBackward = useRef(false);
-    const moveLeft = useRef(false);
-    const moveRight = useRef(false);
-    const [isCrouching, setIsCrouching] = useState(false);
-    const [isSprinting, setIsSprinting] = useState(false);
-
-    // Temporary vectors
-    const direction = useRef(new Vector3());
-    const frontVector = useRef(new Vector3());
-    const sideVector = useRef(new Vector3());
-
-    // Refs for latest state/functions to avoid stale closures in event listeners
-    const gameStateRef = useRef(gameState);
-    const toggleDebugLightsRef = useRef(toggleDebugLights);
-    const emitPulseRef = useRef(emitPulse);
-    const addNoiseRef = useRef(addNoise);
-    const lastFootstepTime = useRef(0);
-
-    useEffect(() => {
-        gameStateRef.current = gameState;
-        toggleDebugLightsRef.current = toggleDebugLights;
-        emitPulseRef.current = emitPulse;
-        addNoiseRef.current = addNoise;
-    }, [gameState, toggleDebugLights, emitPulse, addNoise]);
-
+    // Input handling is now managed by InputContext
+    // We keep KeyL for debug locally for now, or we could move it to InputContext if needed
     useEffect(() => {
         const onKeyDown = (event) => {
-            switch (event.code) {
-                case 'ArrowUp':
-                case 'KeyW': moveForward.current = true; break;
-                case 'ArrowLeft':
-                case 'KeyA': moveLeft.current = true; break;
-                case 'ArrowDown':
-                case 'KeyS': moveBackward.current = true; break;
-                case 'ArrowRight':
-                case 'KeyD': moveRight.current = true; break;
-                case 'ShiftLeft':
-                case 'ShiftRight': setIsCrouching(true); break;
-                case 'ControlLeft':
-                case 'ControlRight': setIsSprinting(true); break;
-                case 'KeyL':
-                    console.log('[Player] KeyL pressed, calling toggleDebugLights');
-                    if (toggleDebugLightsRef.current) toggleDebugLightsRef.current();
-                    break;
-                case 'Space':
-                    // Sonar/Scanner pulse
-                    if (rigidBodyRef.current && gameStateRef.current === 'playing') {
-                        const pos = rigidBodyRef.current.translation();
-                        const type = event.shiftKey ? 1 : 0;
-
-                        const success = emitPulseRef.current([pos.x, pos.y, pos.z], type);
-                        if (success) {
-                            addNoiseRef.current(CLAP_NOISE);
-                            // Play sonar sound at player position
-                            playSound('clap', {
-                                position: [pos.x, pos.y, pos.z],
-                                listenerPosition: [pos.x, pos.y, pos.z],
-                                intensity: 1.0
-                            });
-                            console.log(`Sonar! Pulse emitted at ${pos.x}, ${pos.y}, ${pos.z} with type ${type}`);
-                        }
-                    }
-                    break;
+            if (event.code === 'KeyL') {
+                console.log('[Player] KeyL pressed, calling toggleDebugLights');
+                toggleDebugLights();
             }
         };
-
-        const onKeyUp = (event) => {
-            switch (event.code) {
-                case 'ArrowUp':
-                case 'KeyW': moveForward.current = false; break;
-                case 'ArrowLeft':
-                case 'KeyA': moveLeft.current = false; break;
-                case 'ArrowDown':
-                case 'KeyS': moveBackward.current = false; break;
-                case 'ArrowRight':
-                case 'KeyD': moveRight.current = false; break;
-                case 'ShiftLeft':
-                case 'ShiftRight': setIsCrouching(false); break;
-                case 'ControlLeft':
-                case 'ControlRight': setIsSprinting(false); break;
-            }
-        };
-
         document.addEventListener('keydown', onKeyDown);
-        document.addEventListener('keyup', onKeyUp);
-
-        return () => {
-            document.removeEventListener('keydown', onKeyDown);
-            document.removeEventListener('keyup', onKeyUp);
-        };
-    }, []);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, [toggleDebugLights]);
 
     useFrame((state, delta) => {
         if (!rigidBodyRef.current) return;
@@ -151,10 +73,8 @@ const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
         }
 
         // Movement logic
-        const forward = moveForward.current;
-        const backward = moveBackward.current;
-        const left = moveLeft.current;
-        const right = moveRight.current;
+        // Movement logic
+        const { forward, backward, left, right, crouch, sprint, sonar, sonarType, moveVector } = inputState.current;
 
         // Stamina Logic
         let canSprint = stamina > 0;
@@ -165,10 +85,12 @@ const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
         }
 
         // Actual sprint state depends on input AND stamina
-        const attemptingSprint = isSprinting;
+        // Actual sprint state depends on input AND stamina
+        const attemptingSprint = sprint;
         const actualSprint = attemptingSprint && canSprint && !isPanting;
 
-        const crouch = isCrouching;
+        const isCrouching = crouch;
+
         const jump = false;
 
         // Update Stamina
@@ -214,8 +136,18 @@ const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
 
         // Calculate movement direction relative to camera
         const direction = new Vector3();
-        const frontVector = new Vector3(0, 0, Number(backward) - Number(forward));
-        const sideVector = new Vector3(Number(left) - Number(right), 0, 0);
+
+        let fwdValue = Number(backward) - Number(forward);
+        let sideValue = Number(left) - Number(right);
+
+        // If joystick is active, override keys
+        if (moveVector && (Math.abs(moveVector.x) > 0.05 || Math.abs(moveVector.y) > 0.05)) {
+            fwdValue = moveVector.y;
+            sideValue = -moveVector.x;
+        }
+
+        const frontVector = new Vector3(0, 0, fwdValue);
+        const sideVector = new Vector3(sideValue, 0, 0);
 
         direction.subVectors(frontVector, sideVector).normalize().multiplyScalar(currentSpeed).applyEuler(camera.rotation);
 
@@ -235,6 +167,20 @@ const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
         const cameraHeight = crouch ? 0.75 : PLAYER_HEIGHT;
         camera.position.set(pos.x, pos.y + cameraHeight, pos.z);
 
+        // Handle Look (Mobile)
+        const { lookVector } = inputState.current;
+        if (lookVector.x !== 0 || lookVector.y !== 0) {
+            const SENSITIVITY = 0.005;
+            camera.rotation.y -= lookVector.x * SENSITIVITY;
+            // Lock vertical look (pitch) to 0 (horizontal)
+            // camera.rotation.x -= lookVector.y * SENSITIVITY;
+            // camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
+            camera.rotation.x = 0;
+
+            // Reset look vector
+            inputState.current.lookVector = { x: 0, y: 0 };
+        }
+
         // Footstep sounds - different for each movement type
         const currentTime = performance.now() / 1000;
         let footstepInterval;
@@ -252,10 +198,10 @@ const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
         }
 
         if (isMoving && currentTime - lastFootstepTime.current > footstepInterval) {
+            console.log('[Player] Playing walk sound, volume:', footstepVolume);
             playSound('playerWalk', {
-                position: [pos.x, pos.y, pos.z],
-                listenerPosition: [pos.x, pos.y, pos.z],
-                intensity: footstepVolume
+                intensity: footstepVolume * 2, // Increase volume
+                spatial: false // Make it non-spatial so it always plays
             });
             lastFootstepTime.current = currentTime;
         }
@@ -286,7 +232,29 @@ const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
             const state = crouch ? '(Crouch)' : actualSprint ? '(Sprint)' : isPanting ? '(Panting)' : '';
             debugEl.innerText = `Pos: ${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)} ${state} Stamina: ${Math.floor(stamina)}%`;
         }
+
+        // Handle Sonar Pulse
+        if (sonar && rigidBodyRef.current) {
+            // We need to consume the action so it doesn't fire every frame
+            if (consumeAction('sonar')) {
+                const pos = rigidBodyRef.current.translation();
+                const type = sonarType; // 0 or 1
+
+                const success = emitPulse([pos.x, pos.y, pos.z], type);
+                if (success) {
+                    addNoise(CLAP_NOISE);
+                    playSound('clap', {
+                        position: [pos.x, pos.y, pos.z],
+                        listenerPosition: [pos.x, pos.y, pos.z],
+                        intensity: 1.0
+                    });
+                }
+            }
+        }
     });
+
+    // Check if mobile device
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 900;
 
     return (
         <>
@@ -302,11 +270,13 @@ const Player = ({ startPosition = [0, 1.5, 0], playerRef }) => {
             >
                 <CapsuleCollider args={[0.75, 0.5]} />
             </RigidBody>
-            <PointerLockControls
-                maxPolarAngle={Math.PI / 2}  // Lock camera at horizon (no looking up)
-                minPolarAngle={Math.PI / 2}  // Lock camera at horizon (no looking down)
-                selector="#root" // Ensure it re-locks correctly
-            />
+            {!isMobile && (
+                <PointerLockControls
+                    maxPolarAngle={Math.PI / 2}  // Lock camera at horizon (no looking up)
+                    minPolarAngle={Math.PI / 2}  // Lock camera at horizon (no looking down)
+                    selector="#root" // Ensure it re-locks correctly
+                />
+            )}
         </>
     );
 };

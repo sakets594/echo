@@ -4,86 +4,182 @@ import { useNoise } from '../contexts/NoiseContext';
 import { useScanner } from '../contexts/ScannerContext';
 
 const HUD = () => {
-    const { gameState, hasKey, canRestart, restartGame, debugLights } = useGame();
+    const { gameState, hasKey, canRestart, restartGame, debugLights, pauseGame, toggleDebugLights } = useGame();
     const { noiseLevel } = useNoise();
     const { cooldownRemaining, cooldownDuration } = useScanner();
 
     return (
         <>
-            {/* Instructions */}
+            {/* Instructions - Hide on mobile */}
+            {window.innerWidth >= 900 && (
+                <div style={{
+                    position: 'absolute',
+                    top: '10px',
+                    left: '10px',
+                    color: 'white',
+                    fontFamily: 'monospace',
+                    fontSize: '14px',
+                    pointerEvents: 'none',
+                    textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
+                }}>
+                    <div>Click to play | WASD: Move | Shift: Crouch | Ctrl: Sprint | SPACE: Clap | L: Lights</div>
+                    <div id="debug-pos">Pos: 0, 0, 0</div>
+                    <div style={{ marginTop: '10px' }}>
+                        Noise: {Math.round(noiseLevel)}% | Keys: {hasKey ? '1' : '0'} / 1 | Lights: {debugLights ? 'ON' : 'OFF'}
+                    </div>
+                </div>
+            )}
+
+            {/* Status Bars - Top Left */}
             <div style={{
                 position: 'absolute',
                 top: '10px',
                 left: '10px',
-                color: 'white',
-                fontFamily: 'monospace',
-                fontSize: '14px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '5px',
                 pointerEvents: 'none',
-                textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
+                zIndex: 1500,
+                fontSize: window.innerWidth < 900 ? '9px' : '11px',
+                fontFamily: 'monospace'
             }}>
-                <div>Click to play | WASD: Move | Shift: Crouch | Ctrl: Sprint | SPACE: Clap | L: Lights</div>
-                <div id="debug-pos">Pos: 0, 0, 0</div>
-                <div style={{ marginTop: '10px' }}>
-                    Noise: {Math.round(noiseLevel)}% | Key: {hasKey ? '✓' : '✗'} | Lights: {debugLights ? 'ON' : 'OFF'}
+                {/* Noise Bar */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <span style={{ color: 'white', minWidth: '45px', textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>NOISE:</span>
+                    <div style={{
+                        width: window.innerWidth < 900 ? '100px' : '150px',
+                        height: window.innerWidth < 900 ? '10px' : '12px',
+                        backgroundColor: 'rgba(0,0,0,0.7)',
+                        border: '1px solid white',
+                        borderRadius: '3px',
+                        overflow: 'hidden',
+                    }}>
+                        <div style={{
+                            width: `${noiseLevel}%`,
+                            height: '100%',
+                            backgroundColor: noiseLevel > 80 ? '#ff0000' : noiseLevel > 50 ? '#ffaa00' : '#00ff00',
+                            transition: 'width 0.1s, background-color 0.3s',
+                        }} />
+                    </div>
+                </div>
+
+                {/* Sonar Bar */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <span style={{ color: 'cyan', minWidth: '45px', textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>SONAR:</span>
+                    <div style={{
+                        width: window.innerWidth < 900 ? '100px' : '150px',
+                        height: window.innerWidth < 900 ? '10px' : '12px',
+                        backgroundColor: 'rgba(0,0,0,0.7)',
+                        border: '1px solid cyan',
+                        borderRadius: '3px',
+                        overflow: 'hidden',
+                    }}>
+                        <div style={{
+                            width: `${((cooldownDuration - cooldownRemaining) / cooldownDuration) * 100}%`,
+                            height: '100%',
+                            backgroundColor: '#00ffff',
+                            transition: 'width 0.1s',
+                        }} />
+                    </div>
+                </div>
+
+                {/* Stamina Bar */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <span style={{ color: 'yellow', minWidth: '45px', textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>ENERGY:</span>
+                    <div style={{
+                        width: window.innerWidth < 900 ? '100px' : '150px',
+                        height: window.innerWidth < 900 ? '10px' : '12px',
+                        backgroundColor: 'rgba(0,0,0,0.7)',
+                        border: '1px solid yellow',
+                        borderRadius: '3px',
+                        overflow: 'hidden',
+                    }}>
+                        <div style={{
+                            width: `100%`,
+                            height: '100%',
+                            backgroundColor: '#ffff00',
+                            transition: 'width 0.1s',
+                        }} />
+                    </div>
+                </div>
+
+                {/* Key Indicator */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '3px' }}>
+                    <span style={{ color: 'white', minWidth: '45px', textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>KEYS:</span>
+                    <span style={{
+                        color: hasKey ? '#00ff00' : '#888',
+                        fontWeight: 'bold',
+                        textShadow: '1px 1px 2px rgba(0,0,0,0.8)'
+                    }}>
+                        {hasKey ? '1' : '0'} / 1
+                    </span>
                 </div>
             </div>
 
-            {/* Noise Meter */}
-            <div style={{
-                position: 'absolute',
-                bottom: '30px',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                width: '300px',
-                height: '20px',
-                backgroundColor: 'rgba(0,0,0,0.7)',
-                border: '2px solid white',
-                borderRadius: '10px',
-                overflow: 'hidden',
-                pointerEvents: 'none',
-            }}>
-                <div style={{
-                    width: `${noiseLevel}%`,
-                    height: '100%',
-                    backgroundColor: noiseLevel > 80 ? '#ff0000' : noiseLevel > 50 ? '#ffaa00' : '#00ff00',
-                    transition: 'width 0.1s, background-color 0.3s',
-                }} />
-            </div>
-
-            {/* Scanner Cooldown Indicator */}
-            <div style={{
-                position: 'absolute',
-                bottom: '60px',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                width: '200px',
-                height: '15px',
-                backgroundColor: 'rgba(0,0,0,0.7)',
-                border: '2px solid cyan',
-                borderRadius: '8px',
-                overflow: 'hidden',
-                pointerEvents: 'none',
-            }}>
-                <div style={{
-                    width: `${((cooldownDuration - cooldownRemaining) / cooldownDuration) * 100}%`,
-                    height: '100%',
-                    backgroundColor: '#00ffff',
-                    transition: 'width 0.1s',
-                }} />
-            </div>
-            {cooldownRemaining > 0 && (
+            {/* Mobile Action Buttons (Pause & Light) - Only show during gameplay */}
+            {gameState === 'playing' && (
                 <div style={{
                     position: 'absolute',
-                    bottom: '80px',
+                    bottom: '15px',
                     left: '50%',
                     transform: 'translateX(-50%)',
-                    color: 'cyan',
-                    fontFamily: 'monospace',
-                    fontSize: '12px',
-                    pointerEvents: 'none',
-                    textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
+                    display: 'flex',
+                    gap: '15px',
+                    pointerEvents: 'auto',
+                    zIndex: 1500
                 }}>
-                    Scanner Cooldown: {cooldownRemaining.toFixed(1)}s
+                    <button
+                        onPointerDown={(e) => {
+                            e.preventDefault();
+                            console.log('[HUD] Pause pointerdown');
+                            pauseGame();
+                        }}
+                        style={{
+                            background: 'rgba(0, 0, 0, 0.5)',
+                            border: '1px solid white',
+                            color: 'white',
+                            borderRadius: '50%',
+                            width: '35px',
+                            height: '35px',
+                            fontSize: '16px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            pointerEvents: 'auto',
+                            touchAction: 'none',
+                            WebkitTapHighlightColor: 'transparent',
+                            userSelect: 'none'
+                        }}
+                    >
+                        ⏸
+                    </button>
+                    <button
+                        onPointerDown={(e) => {
+                            e.preventDefault();
+                            console.log('[HUD] Light pointerdown');
+                            toggleDebugLights();
+                        }}
+                        style={{
+                            background: debugLights ? 'rgba(255, 255, 0, 0.5)' : 'rgba(0, 0, 0, 0.5)',
+                            border: '1px solid white',
+                            color: 'white',
+                            borderRadius: '50%',
+                            width: '35px',
+                            height: '35px',
+                            fontSize: '16px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            pointerEvents: 'auto',
+                            touchAction: 'none',
+                            WebkitTapHighlightColor: 'transparent',
+                            userSelect: 'none'
+                        }}
+                    >
+                        💡
+                    </button>
                 </div>
             )}
 
