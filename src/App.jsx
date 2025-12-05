@@ -225,6 +225,8 @@ function GameContent({ currentLevel, setCurrentLevel, allLevels }) {
   const { gameState, setGameState, resetGameState, saveProgress, loadProgress, startGame, pauseGame, resumeGame } = useGame();
   const { resetNoise } = useNoise();
   const [testMode, setTestMode] = useState(false);
+  const [nextLevel, setNextLevel] = useState(null);
+  const [isTestLevel, setIsTestLevel] = useState(false);
 
   // Handle Esc key for pausing
   useEffect(() => {
@@ -248,28 +250,34 @@ function GameContent({ currentLevel, setCurrentLevel, allLevels }) {
     console.log("Level Complete! Transitioning...");
     setGameState('level_transition');
 
-    // Skip auto-progression for test levels
-    const isTestLevel = currentLevel.level_id.startsWith('test_');
+    // Determine if this is a test level
+    const isTest = currentLevel.level_id.startsWith('test_');
+    setIsTestLevel(isTest);
 
-    if (isTestLevel) {
+    // Calculate what comes next
+    const currentIndex = allLevels.findIndex(l => l.level_id === currentLevel.level_id);
+    const next = allLevels[currentIndex + 1];
+
+    if (isTest) {
       console.log("Test level - skipping auto-progression");
+      setNextLevel(null); // No next level for test
       setTimeout(() => {
         // Just reset the current level instead of progressing
         resetGameState();
         resetNoise();
+        setIsTestLevel(false);
       }, 3000);
       return;
     }
 
+    // Set next level info for overlay
+    setNextLevel(next || null);
     saveProgress(currentLevel.level_id);
 
     setTimeout(() => {
-      const currentIndex = allLevels.findIndex(l => l.level_id === currentLevel.level_id);
-      const nextLevel = allLevels[currentIndex + 1];
-
-      if (nextLevel) {
-        console.log("Loading next level:", nextLevel.level_id);
-        setCurrentLevel(nextLevel);
+      if (next) {
+        console.log("Loading next level:", next.level_id);
+        setCurrentLevel(next);
         resetGameState();
         resetNoise();
       } else {
@@ -280,6 +288,8 @@ function GameContent({ currentLevel, setCurrentLevel, allLevels }) {
         resetGameState();
         resetNoise();
       }
+      setNextLevel(null);
+      setIsTestLevel(false);
     }, 3000); // 3 seconds delay
   }, [currentLevel, allLevels, setGameState, saveProgress, resetGameState, resetNoise, setCurrentLevel]);
 
@@ -333,6 +343,13 @@ function GameContent({ currentLevel, setCurrentLevel, allLevels }) {
         <PauseScreen
           onRestart={handleRestart}
           onQuit={handleQuit}
+        />
+      )}
+      {gameState === 'level_transition' && (
+        <LevelCompleteOverlay
+          currentLevel={currentLevel}
+          nextLevel={nextLevel}
+          isTestLevel={isTestLevel}
         />
       )}
       <Canvas shadows camera={{ fov: 75 }}>

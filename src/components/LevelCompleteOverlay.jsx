@@ -1,6 +1,17 @@
 import React from 'react';
 
-const LevelCompleteOverlay = () => {
+const LevelCompleteOverlay = ({ currentLevel, nextLevel, isTestLevel = false }) => {
+    // Determine the message based on context
+    let subtitle = 'Loading next sector...';
+
+    if (isTestLevel) {
+        subtitle = 'Restarting test level...';
+    } else if (!nextLevel) {
+        subtitle = 'Game Complete! Returning to start...';
+    } else if (nextLevel) {
+        subtitle = `Loading ${nextLevel.name || nextLevel.level_id}...`;
+    }
+
     return (
         <div style={{
             position: 'absolute',
@@ -15,18 +26,34 @@ const LevelCompleteOverlay = () => {
             backgroundColor: 'rgba(0, 0, 0, 0.8)',
             color: 'white',
             zIndex: 1000,
-            pointerEvents: 'none' // Allow clicks to pass through if needed, though usually we want to block
+            pointerEvents: 'auto' // Block interactions during transition
         }}>
             <h1 style={{
                 fontSize: '4rem',
                 marginBottom: '20px',
-                textShadow: '0 0 10px #00ff00'
+                textShadow: '0 0 10px #00ff00',
+                animation: 'pulse 1s ease-in-out infinite'
             }}>
-                LEVEL COMPLETE
+                {isTestLevel ? 'TEST COMPLETE' : 'LEVEL COMPLETE'}
             </h1>
+            {currentLevel && (
+                <p style={{
+                    fontSize: '1.2rem',
+                    opacity: 0.6,
+                    marginBottom: '10px'
+                }}>
+                    {currentLevel.name || currentLevel.level_id}
+                </p>
+            )}
             <p style={{ fontSize: '1.5rem', opacity: 0.8 }}>
-                Loading next sector...
+                {subtitle}
             </p>
+            <style>{`
+                @keyframes pulse {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.7; }
+                }
+            `}</style>
         </div>
     );
 };
